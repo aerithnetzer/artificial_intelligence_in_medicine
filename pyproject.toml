@@ -1,0 +1,56 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "artificial_intelligence_in_medicine"
+version = "0.0.1"
+description = "Studying artificial intelligence in medicine"
+authors = [
+  { name = "Aerith Netzer" },
+]
+
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    
+]
+dependencies = [
+    "biopython>=1.85",
+    "cartopy>=0.24.1",
+    "elasticsearch==8.*",
+    "igraph>=0.11.9",
+    "kaleido>=1.0.0",
+    "kneed>=0.8.5",
+    "loguru",
+    "mkdocs",
+    "nbformat>=5.10.4",
+    "networkx>=3.5",
+    "pandas>=2.3.1",
+    "pip",
+    "plotly>=6.2.0",
+    "pyarrow>=21.0.0",
+    "pynvim>=0.5.2",
+    "python-dotenv",
+    "requests>=2.32.4",
+    "ruff",
+    "scikit-learn>=1.7.1",
+    "seaborn>=0.13.2",
+    "tqdm",
+    "typer",
+]
+requires-python = "~=3.11.0"
+
+
+[tool.ruff]
+line-length = 99
+src = ["artificial_intelligence_in_medicine"]
+include = ["pyproject.toml", "artificial_intelligence_in_medicine/**/*.py"]
+
+[tool.ruff.lint]
+extend-select = ["I"]  # Add import sorting
+
+[tool.ruff.lint.isort]
+known-first-party = ["artificial_intelligence_in_medicine"]
+force-sort-within-sections = true
+
