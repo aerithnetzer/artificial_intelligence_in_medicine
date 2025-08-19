@@ -29,6 +29,21 @@ def jaccard_distance(set1, set2):
     # {1, 2, 3}, {1, 2, 3, 4} = 1 - 3/4 = .25, very similar
 
 
+def mean_inter_node_jaccard_distance(G):
+    mesh_dict = {node: set(G.nodes[node].get("mesh_headings", [])) for node in G.nodes()}
+    nodes = list(mesh_dict.keys())
+    total_distance = 0
+    count = 0
+    for i in range(len(nodes)):
+        for j in range(i + 1, len(nodes)):
+            set1 = mesh_dict[nodes[i]]
+            set2 = mesh_dict[nodes[j]]
+            distance = jaccard_distance(set1, set2)
+            total_distance += distance
+            count += 1
+    return total_distance / count if count > 0 else 0
+
+
 @app.command()
 def main(
     # ---- REPLACE DEFAULT PATHS AS APPROPRIATE ----
@@ -42,6 +57,8 @@ def main(
     with open(graph_path, "rb") as f:
         G = pickle.load(f)
 
+    avg_inter_node_distance = mean_inter_node_jaccard_distance(G)
+    print(f"Mean {MODE} inter-node Jaccard distance: {avg_inter_node_distance:.4f}")
     logger.info("Calculating interdisciplinary scores for each node.")
     results = []
     for node in tqdm(G.nodes(), desc="Processing nodes"):
