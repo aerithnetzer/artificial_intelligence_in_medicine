@@ -32,7 +32,7 @@ def get_first_author_affiliation(authors):
 
 
 @app.command()
-def main(
+def get_institution_location_data(
     # ---- REPLACE DEFAULT PATHS AS APPROPRIATE ----
     input_path: Path = INTERIM_DATA_DIR / MODE / "features-flattened-citation-data.parquet",
     output_path: Path = INTERIM_DATA_DIR / MODE / "dataset_with_affiliations.parquet",
