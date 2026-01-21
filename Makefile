@@ -38,9 +38,11 @@ format:
 	ruff check --fix
 	ruff format
 
-
-
-
+.PHONY: clean_figures
+clean_figures:
+	rm -rf reports/figures/gene_expression/*
+	rm -rf reports/figures/artificial_intelligence/*
+	rm -rf reports/figures/null/*
 
 ## Set up Python interpreter environment
 .PHONY: create_environment
