@@ -1,6 +1,6 @@
 from pathlib import Path
 import pickle
-from typing import Counter
+from typing import Any, Counter
 
 from loguru import logger
 import networkx as nx
@@ -24,6 +24,158 @@ def load_graph(graph_path):
     return graph
 
 
+def plot_normalized_constraints_over_time(G, constraints, MODE):
+    """
+    Plot normalized constraint distributions over time.
+
+    Normalization is implicit: each year's distribution is based only on
+    nodes that have a valid constraint value, so years with fewer articles
+    do not dominate the visualization.
+
+    Parameters
+    ----------
+    G : networkx.Graph or DiGraph
+        Graph with node attribute 'year'
+    constraints : dict
+        Output of nx.constraint(G)
+    MODE : str
+        Mode name used for titles and output path
+
+    Returns
+    -------
+    fig : plotly.graph_objects.Figure
+        Interactive violin plot
+    """
+    import plotly.graph_objects as go
+    from collections import defaultdict
+
+    # Collect constraint values by year
+    year_to_constraints = defaultdict(list)
+
+    for node, c in constraints.items():
+        year = G.nodes[node].get("year")
+        if year is not None:
+            year_to_constraints[year].append(c)
+
+    # Sort years
+    years = sorted(year_to_constraints.keys())
+
+    fig = go.Figure()
+
+    for year in years:
+        values = year_to_constraints[year]
+
+        if len(values) < 2:
+            # Skip degenerate distributions
+            continue
+
+        fig.add_trace(
+            go.Violin(
+                x=[year] * len(values),
+                y=values,
+                name=str(year),
+                box_visible=True,
+                meanline_visible=True,
+                showlegend=False,
+                hovertemplate=(
+                    "<b>Year:</b> %{x}<br><b>Constraint:</b> %{y:.4f}<br><extra></extra>"
+                ),
+            )
+        )
+
+    fig.update_layout(
+        title=f"Normalized Constraint Distributions Over Time ({MODE})",
+        xaxis_title="Year",
+        yaxis_title="Constraint",
+        template="plotly_white",
+        width=1100,
+        height=600,
+    )
+
+    # Save output
+    output_path = FIGURES_DIR / MODE / "normalized_constraints_over_time.html"
+    fig.write_html(output_path)
+    logger.info(f"Saved normalized constraint distribution plot to {output_path}")
+
+    return fig
+
+
+def plot_constraints_over_time(G, constraints, MODE):
+    """
+    Plot the median constraint value for every year over time using Plotly.
+
+    Parameters:
+    -----------
+    G : networkx.DiGraph
+        A NetworkX directed graph where nodes have a 'year' attribute
+    constraints : dict
+        Dictionary mapping node IDs to their constraint values (from nx.constraint)
+    MODE : str
+        Description of the constraint type (used for plot title/label)
+
+    Returns:
+    --------
+    fig : plotly.graph_objects.Figure
+        Interactive Plotly figure
+    """
+    # Extract year and constraint data for nodes in the graph
+    year_constraint_data = {}
+
+    import plotly.graph_objects as go
+    import numpy as np
+
+    for node in G.nodes():
+        if node in constraints:
+            print("Found node in constraints")
+            year = G.nodes[node].get("year")
+            if year is not None:
+                if year not in year_constraint_data:
+                    year_constraint_data[year] = []
+                year_constraint_data[year].append(constraints[node])
+                print(constraints[node])
+        else:
+            print("No node found")
+
+    # Calculate median constraint for each year
+    years = sorted(year_constraint_data.keys())
+    medians = [np.median(year_constraint_data[year]) for year in years]
+
+    # Create the Plotly figure
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=years,
+            y=medians,
+            mode="lines+markers",
+            name=f"Median Constraint",
+            line=dict(width=2, color="#1f77b4"),
+            marker=dict(size=8, color="#1f77b4"),
+            hovertemplate="<b>Year:</b> %{x}<br>"
+            + "<b>Median Constraint:</b> %{y:.4f}<br>"
+            + "<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        title=f"Median Network Constraint Over Time ({MODE})",
+        xaxis_title="Year",
+        yaxis_title="Median Constraint",
+        hovermode="closest",
+        template="plotly_white",
+        width=1000,
+        height=600,
+        showlegend=False,
+    )
+
+    # Save the figure
+    output_path = FIGURES_DIR / MODE / "constraints_over_time.html"
+    fig.write_html(output_path)
+    logger.info(f"Saved constraint over time plot to {output_path}")
+
+    return fig
+
+
 def largest_component_subgraph(graph: nx.Graph):
     components = nx.connected_components(graph)
     print(components)
@@ -31,28 +183,8 @@ def largest_component_subgraph(graph: nx.Graph):
     return graph.subgraph(largest)
 
 
-def compute_brokerage(graph):
-    # Node-level brokerage: edges to nodes in other communities
-    node_brokerage = []
-    community_brokerage = Counter()
-    membership = graph.vs["community"]
-    for v in graph.vs:
-        v_comm = membership[v.index]
-        count = 0
-        for neighbor in graph.neighbors(v.index):
-            n_comm = membership[neighbor]
-            if n_comm != v_comm:
-                count += 1
-                community_brokerage[v_comm] += 1
-        node_brokerage.append(count)
-    # Each edge counted twice, so halve community brokerage
-    for k in community_brokerage:
-        community_brokerage[k] //= 2
-    return node_brokerage, community_brokerage
-
-
 def compare_brokerage(node_brokerage, community_brokerage):
-    max_node = max(node_brokerage)
+    max_node = max(node_brokerage.values())
     max_community = max(community_brokerage.values())
     if max_community > max_node:
         return "Communities have greater brokerage."
@@ -60,26 +192,52 @@ def compare_brokerage(node_brokerage, community_brokerage):
         return "Individual articles have greater brokerage."
 
 
-def print_top_community_attributes(graph, community_brokerage):
+def print_top_community_attributes(graph: nx.Graph, community_brokerage):
+    logger.debug(f"Type of community_brokerage: {type(community_brokerage)}")
     top_community = max(community_brokerage, key=community_brokerage.get)
     print(f"Top community (ID: {top_community}) attributes:")
-    for v in graph.vs.select(community=top_community):
-        print(v.attributes())
+
+    # Get all nodes in the top community
+    for v in graph.nodes:
+        if graph.nodes[v].get("community") == top_community:
+            print(graph.nodes[v])
 
 
-def analyze_brokerage(graph: nx.Graph | Path):
-    if isinstance(graph, Path):
-        graph = load_graph(graph)
+def assign_community_labels(MODE, G):
+    from collections import defaultdict
+    from sklearn.feature_extraction.text import TfidfVectorizer
+
+    communities = nx.get_node_attributes(G, "community")
+
+    community_names = {}
+    if nx.get_node_attributes(G, "title"):
+        community_titles = defaultdict(list)
+        for n, data in G.nodes(data=True):
+            community_id = data.get("community")
+            title = data.get("title")
+            if title:
+                community_titles[community_id].append(title)
+
+        for community_id, titles in community_titles.items():
+            if titles:
+                try:
+                    vectorizer = TfidfVectorizer(stop_words="english", max_features=5)
+                    vectorizer.fit_transform(titles)
+                    top_terms = vectorizer.get_feature_names_out()
+                    community_names[community_id] = ", ".join(top_terms)
+                except ValueError:
+                    community_names[community_id] = f"Community {community_id}"
+            else:
+                community_names[community_id] = f"Community {community_id}"
     else:
-        graph = nx.to_undirected(graph)
-        graph = largest_component_subgraph(graph)
-    node_brokerage, community_brokerage = compute_brokerage(graph)
-    result = compare_brokerage(node_brokerage, community_brokerage)
-    print(f"Node brokerage: {node_brokerage}")
-    print(f"Community brokerage: {community_brokerage}")
-    print(result)
-    print_top_community_attributes(graph, community_brokerage)
-    return node_brokerage, community_brokerage, result
+        community_names = {i: f"Community {i}" for i in set(communities.values())}
+
+    # Save community labels
+    nx.set_node_attributes(
+        G, {n: community_names[communities[n]] for n in G.nodes()}, "community_label"
+    )
+
+    return G
 
 
 def calculate_constraint(g: Path | nx.Graph):
@@ -92,7 +250,11 @@ def calculate_constraint(g: Path | nx.Graph):
     return constraint(G)
 
 
-def initialize_graph(mode: str = "ARTIFICIAL_INTELLIGENCE"):
+def visualize_constraints(g):
+    pass
+
+
+def initialize_graph(mode: str):
     MODE = mode
     features_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json"
     model_path: Path = MODELS_DIR / MODE / "citation_model.pkl"
@@ -107,11 +269,11 @@ def initialize_graph(mode: str = "ARTIFICIAL_INTELLIGENCE"):
     pmid_column = "pmid" if "pmid" in df.columns else "_id"
     if pmid_column not in df.columns:
         raise KeyError(
-            f"Neither 'pmid' nor '_id' found in DataFrame columns: {df.columns.tolist()}"
+            f"""Neither 'pmid' nor '_id' found in DataFrame columns: {df.columns.tolist()}"""
         )
     logger.info(f"Using '{pmid_column}' as PMID column")
 
-    print(str(df["cited_by"]))
+    logger.info("Now adding nodes to the graph.")
     logger.info("Now adding nodes to the graph.")
     for _, row in tqdm(df.iterrows(), desc="Adding nodes"):
         G.add_node(
@@ -120,6 +282,12 @@ def initialize_graph(mode: str = "ARTIFICIAL_INTELLIGENCE"):
             cited_by=row["cited_by"],
             mesh_headings=row["mesh_headings"],
             year=row["year"],
+            matched_lat=row.get("matched_lat"),
+            matched_lon=row.get("matched_lon"),
+            matched_country=row.get("matched_country"),
+            matched_ror_id=row.get("matched_ror_id"),
+            matched_name=row.get("matched_name"),
+            matched_raw_text=row.get("matched_raw_text"),
         )
 
     logger.info("Now adding edges to the graph.")
@@ -174,7 +342,7 @@ def find_central_nodes(mode: str = "ARTIFICIAL_INTELLIGENCE"):
         logger.info(f"  - Title: {title}, Centrality: {score:.4f}")
 
 
-def community_detection(mode: str, g: nx.Graph | Path):
+def community_detection(mode: str, G: nx.Graph | Path, inflection_point: int) -> nx.Graph:
     from collections import defaultdict
     from pathlib import Path
     import pickle
@@ -185,30 +353,18 @@ def community_detection(mode: str, g: nx.Graph | Path):
     import plotly.graph_objects as go
     from sklearn.feature_extraction.text import TfidfVectorizer
 
-    MODE = mode
-    graph_path: Path = MODELS_DIR / MODE / "citation_model.pkl"
-    output_path: Path = FIGURES_DIR / MODE / "community_detection.html"
-    if isinstance(g, Path):
-        with open(graph_path, "rb") as f:
-            G: nx.Graph = pickle.load(f)
-    else:
-        G = g
-    original_node_count = G.number_of_nodes()
-
-    # Choose inflection point
-    if MODE == "GENE_EXPRESSION":
-        inflection_point = 25
-    else:
-        inflection_point = 23
+    g = G
+    original_node_count = g.number_of_nodes()
 
     # Filter to high-degree nodes
-    graph = G.to_undirected()
-    graph = graph.subgraph([n for n, d in graph.degree() if d > inflection_point]).copy()
+    g = g.to_undirected()
+    g = g.subgraph([n for n, d in g.degree() if d > inflection_point]).copy()
 
-    high_degree_nodes = graph.number_of_nodes()
+    high_degree_nodes = g.number_of_nodes()
     percent_high_degree = (
         100 * high_degree_nodes / original_node_count if original_node_count > 0 else 0
     )
+
     print(
         f"Inflection point degree: {inflection_point}. "
         f"Nodes above inflection: {high_degree_nodes} "
@@ -216,178 +372,240 @@ def community_detection(mode: str, g: nx.Graph | Path):
     )
 
     # Remove isolated nodes
-    isolated = list(nx.isolates(graph))
+    isolated = list(nx.isolates(g))
     if isolated:
-        graph.remove_nodes_from(isolated)
+        g.remove_nodes_from(isolated)
 
     # Preserve graph metadata
-    if hasattr(G, "graph") and "year" in G.graph:
-        graph.graph["year"] = G.graph["year"]
+    if hasattr(g, "graph") and "year" in g.graph:
+        g.graph["year"] = g.graph["year"]
 
     # COMMUNITY DETECTION
     communities = None
-    if graph.number_of_nodes() > 0 and graph.number_of_edges() > 0:
+    if g.number_of_nodes() > 0 and g.number_of_edges() > 0:
         try:
             # Using greedy modularity as an analog to Leiden (works in NetworkX)
-            communities_list = list(greedy_modularity_communities(graph))
+            communities_list = list(greedy_modularity_communities(g))
             # Build membership map
+            logger.success("Sucessfully completed community detection.")
             membership = {}
             for i, comm in enumerate(communities_list):
                 for node in comm:
                     membership[node] = i
             communities = membership
-            modularity_score = nx.algorithms.community.modularity(graph, communities_list)
+            modularity_score = nx.algorithms.community.modularity(g, communities_list)
         except Exception as e:
-            print(f"Error during community detection: {e}")
-            communities = {n: i for i, n in enumerate(graph.nodes())}
+            logger.error(f"Error during community detection: {e}")
+            communities = {n: i for i, n in enumerate(g.nodes())}
             modularity_score = 0.0
     else:
-        communities = {n: i for i, n in enumerate(graph.nodes())}
+        communities = {n: i for i, n in enumerate(g.nodes())}
         modularity_score = 0.0
-
+    logger.info(f"Communities: {communities}")
     # Assign community membership
-    nx.set_node_attributes(graph, communities, "community")
-
+    nx.set_node_attributes(g, communities, "community")
+    return g
     # Generate community names
-    community_names = {}
-    if nx.get_node_attributes(graph, "title"):
-        community_titles = defaultdict(list)
-        for n, data in graph.nodes(data=True):
-            community_id = data.get("community")
-            title = data.get("title")
-            if title:
-                community_titles[community_id].append(title)
+    #
 
-        for community_id, titles in community_titles.items():
-            if titles:
-                try:
-                    vectorizer = TfidfVectorizer(stop_words="english", max_features=5)
-                    vectorizer.fit_transform(titles)
-                    top_terms = vectorizer.get_feature_names_out()
-                    community_names[community_id] = ", ".join(top_terms)
-                except ValueError:
-                    community_names[community_id] = f"Community {community_id}"
-            else:
-                community_names[community_id] = f"Community {community_id}"
-    else:
-        community_names = {i: f"Community {i}" for i in set(communities.values())}
 
-    # Save community labels
-    nx.set_node_attributes(
-        graph, {n: community_names[communities[n]] for n in graph.nodes()}, "community_label"
-    )
+def calculate_inflection_point(G: nx.Graph, MODE: str) -> int:
+    import numpy as np
 
-    # Save updated graph and labels
-    output_graph_path = graph_path.with_name(f"{graph_path.stem}_with_communities.pkl")
-    with open(output_graph_path, "wb") as f:
-        pickle.dump(graph, f)
+    mode = MODE
+    degrees_raw = [val for (_, val) in G.degree()]
+    processed_degrees = []
+    for item in degrees_raw:
+        if (
+            isinstance(item, (list, tuple))
+            and len(item) == 1
+            and isinstance(item[0], (int, float))
+        ):
+            processed_degrees.append(int(item[0]))
+        elif isinstance(item, (int, float)):
+            processed_degrees.append(int(item))
 
-    with open(output_path.with_name("community_labels.pkl"), "wb") as f:
-        pickle.dump(community_names, f)
+    if not processed_degrees:
+        logger.warning("No degree data to plot.")
 
-    print("Graph and labels saved. Visualizing...")
+    sorted_degrees_values = sorted(processed_degrees, reverse=True)
+    p1 = np.array([0, sorted_degrees_values[0]])
+    p_last_idx = len(sorted_degrees_values) - 1
+    p_last = np.array([p_last_idx, sorted_degrees_values[p_last_idx]])
 
-    # Visualization
-    try:
-        pos = nx.spring_layout(graph, seed=42, k=0.15 if graph.number_of_nodes() < 1000 else None)
-        x_coords = [pos[n][0] for n in graph.nodes()]
-        y_coords = [pos[n][1] for n in graph.nodes()]
+    distances = []
+    for i, deg in enumerate(sorted_degrees_values):
+        pi = np.array([i, deg])
+        dist = (
+            0
+            if np.all(p_last == p1)
+            else np.abs(np.cross(p_last - p1, p1 - pi)) / np.linalg.norm(p_last - p1)
+        )
+        distances.append(dist)
 
-        node_titles = [data.get("title", f"Node {n}") for n, data in graph.nodes(data=True)]
+    if distances:
+        elbow_index = int(np.argmax(distances))
+        inflection_degree_threshold: int = sorted_degrees_values[elbow_index]
 
-        colors_discrete = px.colors.qualitative.Set1 + px.colors.qualitative.Set3
-        node_colors = [
-            colors_discrete[data["community"] % len(colors_discrete)]
-            for n, data in graph.nodes(data=True)
-        ]
+    return inflection_degree_threshold
 
-        # Edges
-        edge_x, edge_y = [], []
-        edge_shapes = []
-        for u, v in graph.edges():
-            x0, y0 = pos[u]
-            x1, y1 = pos[v]
-            edge_x.extend([x0, x1, None])
-            edge_y.extend([y0, y1, None])
-            edge_shapes.append(
-                dict(
-                    type="line",
-                    x0=x0,
-                    y0=y0,
-                    x1=x1,
-                    y1=y1,
-                    line=dict(color="#888", width=0.5),
-                    opacity=0.7,
-                    layer="below",
-                )
+
+def assign_countries_from_latlon(G):
+    """
+    Adds a 'country' attribute to each node using matched_lat/matched_lon.
+    Uses Natural Earth (offline, reproducible).
+    """
+    import geopandas as gpd
+    from shapely.geometry import Point
+
+    # Load world country polygons
+    world = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
+    world = world[["name", "geometry"]].rename(columns={"name": "country"})
+
+    # Build GeoDataFrame of nodes
+    rows = []
+    for node, data in G.nodes(data=True):
+        lat = data.get("matched_lat")
+        lon = data.get("matched_lon")
+        if lat is not None and lon is not None:
+            rows.append(
+                {
+                    "node": node,
+                    "geometry": Point(lon, lat),
+                }
             )
 
-        # Node sizes
-        citation_counts = [
-            len(data.get("cited_by", [])) if data.get("cited_by") else 0
-            for _, data in graph.nodes(data=True)
-        ]
-        node_sizes = [10 + 2 * np.log(c + 1) for c in citation_counts]
-        print(len(node_sizes), "node sizes calculated")
+    nodes_gdf = gpd.GeoDataFrame(rows, crs="EPSG:4326")
 
-        node_trace = go.Scatter(
-            x=x_coords,
-            y=y_coords,
-            mode="markers",
-            hoverinfo="text",
-            text=[
-                f"Title: {title}<br>"
-                f"Community: {data['community_label']}<br>"
-                f"Cited by: {len(data.get('cited_by', []))}"
-                for (n, data), title in zip(graph.nodes(data=True), node_titles)
-            ],
-            marker=dict(size=node_sizes, color=node_colors, line=dict(width=2, color="white")),
-        )
+    # Spatial join
+    joined = gpd.sjoin(nodes_gdf, world, how="left", predicate="within")
 
-        edge_trace = go.Scatter(
-            x=edge_x,
-            y=edge_y,
-            line=dict(width=0.5, color="#888"),
-            hoverinfo="none",
-            mode="lines",
-        )
+    # Attach country back to graph
+    country_map = dict(zip(joined["node"], joined["country"]))
+    nx.set_node_attributes(G, country_map, "country")
 
-        fig = go.Figure(
-            data=[edge_trace, node_trace],
-            layout=go.Layout(
-                title=(
-                    f"Interactive Graph Visualization<br>"
-                    f"{len(set(communities.values()))} communities, "
-                    f"Modularity: {modularity_score:.4f}"
-                ),
+    return G
+
+
+def assign_countries_from_latlon(G):
+    """
+    Adds a 'country' attribute to each node using matched_lat/matched_lon.
+    Compatible with GeoPandas >= 1.0.
+    """
+    import geopandas as gpd
+    import networkx as nx
+    from shapely.geometry import Point
+    from pathlib import Path
+    import zipfile
+    import urllib.request
+
+    # Where to cache Natural Earth
+    data_dir = Path.home() / ".cache" / "natural_earth"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    shp_path = data_dir / "ne_110m_admin_0_countries.shp"
+
+    if not shp_path.exists():
+        url = "https://naturalearth.s3.amazonaws.com/110m_cultural/ne_110m_admin_0_countries.zip"
+        zip_path = data_dir / "countries.zip"
+        urllib.request.urlretrieve(url, zip_path)
+
+        with zipfile.ZipFile(zip_path, "r") as z:
+            z.extractall(data_dir)
+
+    # Load country polygons
+    world = gpd.read_file(shp_path)[["ADMIN", "geometry"]]
+    world = world.rename(columns={"ADMIN": "country"})
+
+    # Build GeoDataFrame of nodes
+    rows = []
+    for node, data in G.nodes(data=True):
+        lat = data.get("matched_lat")
+        lon = data.get("matched_lon")
+        if lat is not None and lon is not None:
+            rows.append(
+                {
+                    "node": node,
+                    "geometry": Point(lon, lat),
+                }
+            )
+
+    if not rows:
+        raise ValueError("No nodes had matched_lat/matched_lon")
+
+    nodes_gdf = gpd.GeoDataFrame(rows, crs="EPSG:4326")
+
+    # Spatial join
+    joined = gpd.sjoin(nodes_gdf, world, how="left", predicate="within")
+
+    # Attach to graph
+    country_map = dict(zip(joined["node"], joined["country"]))
+    nx.set_node_attributes(G, country_map, "country")
+
+    return G
+
+
+def plot_constraints_by_country(G, constraints, MODE, min_articles=20):
+    """
+    Plot constraint distributions by country using violins.
+
+    Parameters
+    ----------
+    G : networkx.Graph
+        Graph with 'country' attribute on nodes
+    constraints : dict
+        Output of nx.constraint(G)
+    MODE : str
+        Mode name for labeling
+    min_articles : int
+        Minimum number of articles required to include a country
+    """
+    import plotly.graph_objects as go
+    from collections import defaultdict
+
+    country_constraints = defaultdict(list)
+
+    for node, c in constraints.items():
+        country = G.nodes[node].get("country")
+        if country is not None:
+            country_constraints[country].append(c)
+
+    # Filter small-N countries
+    country_constraints = {
+        c: vals for c, vals in country_constraints.items() if len(vals) >= min_articles
+    }
+
+    # Sort by median constraint
+    countries = sorted(
+        country_constraints.keys(),
+        key=lambda c: sum(country_constraints[c]) / len(country_constraints[c]),
+    )
+
+    fig = go.Figure()
+
+    for country in countries:
+        fig.add_trace(
+            go.Violin(
+                x=[country] * len(country_constraints[country]),
+                y=country_constraints[country],
+                name=country,
+                box_visible=True,
+                meanline_visible=True,
                 showlegend=False,
-                hovermode="closest",
-                margin=dict(b=20, l=5, r=5, t=40),
-                annotations=[
-                    dict(
-                        text="Hover over nodes to see titles",
-                        showarrow=False,
-                        xref="paper",
-                        yref="paper",
-                        x=0.005,
-                        y=-0.002,
-                        xanchor="left",
-                        yanchor="bottom",
-                        font=dict(color="gray", size=12),
-                    )
-                ],
-                xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                width=1800,
-                height=1200,
-                shapes=edge_shapes,
-            ),
+            )
         )
 
-        fig.write_html(output_path)
+    fig.update_layout(
+        title=f"Constraint Distributions by Country ({MODE})",
+        xaxis_title="Country",
+        yaxis_title="Constraint",
+        template="plotly_white",
+        width=1200,
+        height=600,
+    )
 
-        png_output_path = output_path.with_suffix(".png")
-        fig.write_image(png_output_path, width=1200, height=800, scale=5)
+    output_path = FIGURES_DIR / MODE / "constraints_by_country.html"
+    fig.write_html(output_path)
+    logger.info(f"Saved constraints-by-country plot to {output_path}")
 
-    except Exception as e:
-        print(f"Could not plot communities: {e}")
+    return fig
