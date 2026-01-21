@@ -159,6 +159,8 @@ def run_plots(
         fig2.write_image(Path(str(output_path)).with_suffix(".png"))
         logger.success(f"Elbow curve saved to {output_path}")
 
+        return None
+
 
 if __name__ == "__main__":
     run_plots()

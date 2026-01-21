@@ -1,6 +1,6 @@
 from pathlib import Path
 import pickle
-
+import networkx as nx
 import igraph as ig
 from loguru import logger
 import numpy as np
@@ -10,7 +10,8 @@ import plotly.graph_objects as go
 from scipy.stats import norm as stats_norm
 from tqdm import tqdm
 import typer
-
+from sklearn.feature_extraction.text import TfidfVectorizer
+from collections import defaultdict
 from artificial_intelligence_in_medicine.config import (
     FIGURES_DIR,
     INTERIM_DATA_DIR,
@@ -18,60 +19,185 @@ from artificial_intelligence_in_medicine.config import (
     PROCESSED_DATA_DIR,
     RAW_DATA_DIR,
 )
+from datetime import datetime
 
-MODE = "GENE_EXPRESSION"
+
+def plot_communities(G: nx.Graph, MODE: str):
+    output_path: Path = FIGURES_DIR / MODE / "communities.html"
+    communities = nx.get_node_attributes(G, "community")
+    community_names = {}
+    if nx.get_node_attributes(G, "title"):
+        community_titles = defaultdict(list)
+        for n, data in G.nodes(data=True):
+            community_id = data.get("community")
+            title = data.get("title")
+            if title:
+                community_titles[community_id].append(title)
+
+        for community_id, titles in community_titles.items():
+            if titles:
+                try:
+                    vectorizer = TfidfVectorizer(stop_words="english", max_features=5)
+                    vectorizer.fit_transform(titles)
+                    top_terms = vectorizer.get_feature_names_out()
+                    community_names[community_id] = ", ".join(top_terms)
+                except ValueError:
+                    community_names[community_id] = f"Community {community_id}"
+            else:
+                community_names[community_id] = f"Community {community_id}"
+    else:
+        community_names = {
+            i: f"""Community {i}
+            """
+            for i in set(communities.values())
+        }
+
+    # Save community labels
+    nx.set_node_attributes(
+        G, {n: community_names[communities[n]] for n in G.nodes()}, "community_label"
+    )
+
+    print("Graph and labels saved. Visualizing...")
+
+    # Visualization
+    try:
+        pos = nx.spring_layout(G, seed=42, k=0.15 if G.number_of_nodes() < 1000 else None)
+        x_coords = [pos[n][0] for n in G.nodes()]
+        y_coords = [pos[n][1] for n in G.nodes()]
+
+        node_titles = [data.get("title", f"Node {n}") for n, data in G.nodes(data=True)]
+
+        colors_discrete = px.colors.qualitative.Set1 + px.colors.qualitative.Set3
+        node_colors = [
+            colors_discrete[data["community"] % len(colors_discrete)]
+            for n, data in G.nodes(data=True)
+        ]
+
+        # Edges
+        edge_x, edge_y = [], []
+        edge_shapes = []
+        for u, v in G.edges():
+            x0, y0 = pos[u]
+            x1, y1 = pos[v]
+            edge_x.extend([x0, x1, None])
+            edge_y.extend([y0, y1, None])
+            edge_shapes.append(
+                dict(
+                    type="line",
+                    x0=x0,
+                    y0=y0,
+                    x1=x1,
+                    y1=y1,
+                    line=dict(color="#888", width=0.5),
+                    opacity=0.7,
+                    layer="below",
+                )
+            )
+
+        # Node sizes
+        citation_counts = [
+            len(data.get("cited_by", [])) if data.get("cited_by") else 0
+            for _, data in G.nodes(data=True)
+        ]
+        node_sizes = [10 + 2 * np.log(c + 1) for c in citation_counts]
+        print(len(node_sizes), "node sizes calculated")
+
+        node_trace = go.Scatter(
+            x=x_coords,
+            y=y_coords,
+            mode="markers",
+            hoverinfo="text",
+            text=[
+                f"Title: {title}<br>"
+                f"Community: {data['community_label']}<br>"
+                f"Cited by: {len(data.get('cited_by', []))}"
+                for (n, data), title in zip(G.nodes(data=True), node_titles)
+            ],
+            marker=dict(size=node_sizes, color=node_colors, line=dict(width=2, color="white")),
+        )
+
+        edge_trace = go.Scatter(
+            x=edge_x,
+            y=edge_y,
+            line=dict(width=0.5, color="#888"),
+            hoverinfo="none",
+            mode="lines",
+        )
+
+        fig = go.Figure(
+            data=[edge_trace, node_trace],
+            layout=go.Layout(
+                title=(
+                    f"Interactive Graph Visualization<br>"
+                    f"{len(set(communities.values()))} communities, "
+                ),
+                showlegend=False,
+                hovermode="closest",
+                margin=dict(b=20, l=5, r=5, t=40),
+                annotations=[
+                    dict(
+                        text="Hover over nodes to see titles",
+                        showarrow=False,
+                        xref="paper",
+                        yref="paper",
+                        x=0.005,
+                        y=-0.002,
+                        xanchor="left",
+                        yanchor="bottom",
+                        font=dict(color="gray", size=12),
+                    )
+                ],
+                xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                width=1800,
+                height=1200,
+                shapes=edge_shapes,
+            ),
+        )
+
+        fig.write_html(output_path)
+
+        png_output_path = output_path.with_suffix(".png")
+        fig.write_image(png_output_path, width=1200, height=800, scale=5)
+
+    except Exception as e:
+        print(f"Could not plot communities: {e}")
 
 
-def horizontal_timeline(
-    graph_path: Path = MODELS_DIR / MODE / "citation_model_with_communities.pkl",
-    features_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json",
-    output_path: Path = FIGURES_DIR / MODE,
-):
-    import igraph as ig
-
+def plot_horizontal_timeline(G, MODE: str):
+    features_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json"
+    fig_output_path: Path = FIGURES_DIR / MODE / "horizontal_timeline.html"
     """Generate horizontal timeline showing community presence over years."""
-    with open(graph_path, "rb") as f:
-        graph: ig.Graph = pickle.load(f)
-
-    graph = graph.simplify()
-    graph = graph.as_undirected(combine_edges="first")
-
     features_df = pd.read_json(features_path)
     features_df["pmid"] = features_df["pmid"].astype(str)
-
-    if "year" not in graph.vs.attributes():
-        raise ValueError("Graph vertices are missing the 'year' attribute.")
 
     data = {
         "year": [],
         "community": [],
     }
-    for v in graph.vs:
-        degree = graph.degree(v.index)
-        community = (
-            v["community_label"] if "community_label" in graph.vs.attributes() else v["community"]
+
+    for node_id in G.nodes():
+        node_attrs = G.nodes[node_id]  # Access node attributes
+        degree = G.degree(node_id)  # Get degree of specific node
+
+        # Get community from node attributes
+        community = node_attrs.get("community_label", node_attrs.get("community"))
+
+        # Count nodes with same community
+        same_community_count = sum(
+            1
+            for other_node in G.nodes()
+            if G.nodes[other_node].get("community_label", G.nodes[other_node].get("community"))
+            == community
         )
-        if not (
-            degree == 0
-            and sum(
-                1
-                for vv in graph.vs
-                if (
-                    (
-                        vv["community_label"]
-                        if "community_label" in graph.vs.attributes()
-                        else vv["community"]
-                    )
-                    == community
-                )
-            )
-            == 1
-        ):
-            data["year"].append(v["year"])
+
+        # Filter out isolated nodes in singleton communities
+        if not (degree == 0 and same_community_count == 1):
+            data["year"].append(node_attrs["year"])
             data["community"].append(str(community))
+
     df = pd.DataFrame(data)
     df = df.sort_values("year")
-
     community_counts_by_year = df.groupby(["year", "community"]).size().reset_index(name="count")
 
     # Create color mapping using same logic as original
@@ -126,7 +252,8 @@ def horizontal_timeline(
         ),
         xaxis_title="Year",
         showlegend=False,  # Remove legend since y-axis shows communities
-        height=max(400, len(unique_communities) * 50),  # Scale height with number of communities
+        # Scale height with number of communities
+        height=max(400, len(unique_communities) * 50),
         bargap=0.2,
     )
 
@@ -134,10 +261,10 @@ def horizontal_timeline(
     for i in range(len(unique_communities)):
         fig.add_hline(y=i, line_dash="dot", line_color="lightgray", opacity=0.5)
 
-    output_path.mkdir(parents=True, exist_ok=True)
-    plot_file = output_path / "community_timeline_horizontal.html"
-    fig.write_html(plot_file)
-    logger.success(f"Horizontal community timeline saved as '{plot_file}'")
+    # Fixed: create parent directory
+    fig_output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.write_html(fig_output_path)
+    logger.success(f"""Horizontal community timeline saved as '{fig_output_path}'""")
 
 
 def make_scatterplot_visualization():
@@ -151,55 +278,70 @@ def fisher_r_to_z(r: float) -> float:
     return 0.5 * np.log((1 + r) / (1 - r))
 
 
-def plot_communities_vertical_barchart(
-    graph_path: Path = MODELS_DIR / MODE / "citation_model_with_communities.pkl",
-    features_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json",
-    output_path: Path = FIGURES_DIR / MODE / "communities_vertical_barchart.html",
-):
-    with open(graph_path, "rb") as f:
-        graph: ig.Graph = pickle.load(f)
-
-    graph = graph.simplify()
-    graph = graph.as_undirected(combine_edges="first")
-
+def plot_communities_vertical_barchart(MODE: str, G: nx.Graph):
+    features_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json"
+    output_path: Path = FIGURES_DIR / MODE / "horizontal_timeline.html"
+    """Generate horizontal timeline showing community presence over years."""
     features_df = pd.read_json(features_path)
     features_df["pmid"] = features_df["pmid"].astype(str)
-
-    if "year" not in graph.vs.attributes():
-        raise ValueError("Graph vertices are missing the 'year' attribute.")
 
     data = {
         "year": [],
         "community": [],
     }
-    for v in graph.vs:
-        degree = graph.degree(v.index)
-        community = (
-            v["community_label"] if "community_label" in graph.vs.attributes() else v["community"]
+
+    for node_id in G.nodes():
+        node_attrs = G.nodes[node_id]  # Access node attributes
+        degree = G.degree(node_id)  # Get degree of specific node
+
+        # Get community from node attributes
+        community = node_attrs.get("community_label", node_attrs.get("community"))
+
+        # Count nodes with same community
+        same_community_count = sum(
+            1
+            for other_node in G.nodes()
+            if G.nodes[other_node].get("community_label", G.nodes[other_node].get("community"))
+            == community
         )
-        if not (
-            degree == 0
-            and sum(
-                1
-                for vv in graph.vs
-                if (
-                    (
-                        vv["community_label"]
-                        if "community_label" in graph.vs.attributes()
-                        else vv["community"]
-                    )
-                    == community
-                )
-            )
-            == 1
-        ):
-            data["year"].append(v["year"])
+
+        # Filter out isolated nodes in singleton communities
+        if not (degree == 0 and same_community_count == 1):
+            data["year"].append(node_attrs["year"])
             data["community"].append(str(community))
+
     df = pd.DataFrame(data)
     df = df.sort_values("year")
-
     community_counts_by_year = df.groupby(["year", "community"]).size().reset_index(name="count")
-    community_counts_by_year = community_counts_by_year.sort_values("year")
+
+    # Create color mapping using same logic as original
+    colors_discrete = px.colors.qualitative.Set1 + px.colors.qualitative.Set3
+    unique_communities = sorted(community_counts_by_year["community"].unique())
+    color_map = {
+        community: colors_discrete[i % len(colors_discrete)]
+        for i, community in enumerate(unique_communities)
+    }
+
+    print("Generating horizontal timeline of communities...")
+
+    # Create timeline data - each community gets a horizontal bar
+    timeline_data = []
+    for i, community in enumerate(unique_communities):
+        community_data = community_counts_by_year[
+            community_counts_by_year["community"] == community
+        ]
+        for _, row in community_data.iterrows():
+            timeline_data.append(
+                {
+                    "year": row["year"],
+                    "community": community,
+                    "community_y": i,  # Y position for horizontal layout
+                    "count": row["count"],
+                    "color": color_map[community],
+                }
+            )
+
+    timeline_df = pd.DataFrame(timeline_data)
 
     print("Generating stacked bar chart of communities over time...")
 
@@ -229,7 +371,6 @@ def plot_communities_vertical_barchart(
         bargap=0.2,
     )
 
-    output_path.mkdir(parents=True, exist_ok=True)
     fig.write_html(output_path)
     print(f"Community evolution plot saved as '{output_path}'")
 
@@ -276,9 +417,8 @@ def test_pearson_correlation_diff_statistically_significant(
     }
 
 
-def normalized_citations_over_time(
-    input_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json",
-):
+def normalized_citations_over_time(MODE: str):
+    input_path: Path = (INTERIM_DATA_DIR / MODE / "features_with_ror.json",)
     """
     Plot proportion of total citations contributed by publications of each year.
     (Total citations in that year) / (Total citations across all years).
@@ -329,7 +469,8 @@ def normalized_citations_over_time(
         y=normalized.values,
         markers=True,
         labels={"x": "Year", "y": "Proportion of Total Citations"},
-        title=f"{MODE} Normalized Citations Over Time (CV={normalized.std() / normalized.mean():.2f})",
+        title=f"""{MODE} Normalized Citations Over Time (CV={
+            normalized.std() / normalized.mean():.2f})""",
         width=1200,
         height=800,
     )
@@ -340,11 +481,12 @@ def normalized_citations_over_time(
     logger.success("Displayed normalized citations over time plot.")
 
 
-def normalized_articles_over_time(
-    input_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json",
-):
+def plot_normalized_articles_over_time(MODE: str):
+    input_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json"
     """
-    Generates a line plot showing the number of articles per year, normalized by the maximum number of articles in any year.
+    Generates a line plot showing:
+    - Min–max scaled article counts per year (left y-axis)
+    - Raw article counts per year (right y-axis)
     """
     logger.info(f"Loading data from {input_path}...")
     try:
@@ -362,17 +504,60 @@ def normalized_articles_over_time(
 
     # Count articles per year
     year_counts = df["year"].value_counts().sort_index()
-    max_count = year_counts.max()
-    normalized_counts = year_counts / max_count
 
-    # Create line plot
-    fig = px.line(
-        x=normalized_counts.index,
-        y=normalized_counts.values,
-        labels={"x": "Year", "y": "Normalized Article Count"},
-        title=f"{MODE} Normalized Articles Over Time (CV={normalized_counts.std() / normalized_counts.mean():.2f})",
+    min_count = year_counts.min()
+    max_count = year_counts.max()
+
+    if min_count == max_count:
+        logger.warning("All years have the same article count; min–max scaling will be zero.")
+        scaled_counts = year_counts * 0.0
+    else:
+        scaled_counts = (year_counts - min_count) / (max_count - min_count)
+
+    cv = scaled_counts.std() / scaled_counts.mean()
+
+    # Create figure
+    fig = go.Figure()
+
+    # Scaled counts (left y-axis)
+    fig.add_trace(
+        go.Scatter(
+            x=scaled_counts.index,
+            y=scaled_counts.values,
+            name="Min–Max Scaled Count",
+            mode="lines+markers",
+            yaxis="y1",
+        )
     )
-    fig.write_html(str(FIGURES_DIR / MODE / "normalized_articles_over_time.html"))
+
+    # Raw counts (right y-axis)
+    fig.add_trace(
+        go.Scatter(
+            x=year_counts.index,
+            y=year_counts.values,
+            name="Raw Article Count",
+            mode="lines+markers",
+            yaxis="y2",
+        )
+    )
+
+    # Layout with dual y-axes
+    fig.update_layout(
+        title=f"{MODE} Articles Over Time (Scaled CV={cv:.2f})",
+        xaxis=dict(title="Year"),
+        yaxis=dict(
+            title="Min–Max Scaled Article Count",
+            range=[0, 1],
+        ),
+        yaxis2=dict(
+            title="Raw Article Count",
+            overlaying="y",
+            side="right",
+        ),
+        legend=dict(x=0.01, y=0.99),
+    )
+
+    fig.write_html(str(FIGURES_DIR / MODE / "articles_over_time_raw_and_scaled.html"))
 
 
 def scatterplot_with_line_of_best_fit(
@@ -431,13 +616,15 @@ def scatterplot_with_line_of_best_fit(
     # Calculate Pearson correlation
     pearson_corr = df_corr["jaccard_distance"].corr(df_corr["num_cited_by"], method="pearson")
     logger.info(
-        f"Pearson correlation between Jaccard distance and number of citations: {pearson_corr:.4f}"
+        f"""Pearson correlation between Jaccard distance and number of citations: {
+            pearson_corr:.4f}"""
     )
 
     # Calculate Spearman correlation
     spearman_corr = df_corr["jaccard_distance"].corr(df_corr["num_cited_by"], method="spearman")
     logger.info(
-        f"Spearman correlation between Jaccard distance and number of citations: {spearman_corr:.4f}"
+        f"""Spearman correlation between Jaccard distance and number of citations: {
+            spearman_corr:.4f}"""
     )
 
     figures_dir = FIGURES_DIR / mode
@@ -465,7 +652,8 @@ def scatterplot_with_line_of_best_fit(
         legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
         width=2000,
         height=1200,
-        yaxis=dict(range=[0, max(y) * 1.05]),  # Extend y-axis to slightly above max citations
+        # Extend y-axis to slightly above max citations
+        yaxis=dict(range=[0, max(y) * 1.05]),
     )
     fig.write_html(str(fig_path_html))
     fig.write_image(str(fig_path_png), scale=10)
@@ -528,8 +716,8 @@ def compare_mode_correlations(
 
     diff = ai_pearson - ge_pearson
     logger.info(
-        f"AI r={ai_pearson:.4f} (n={n_A}) | GE r={ge_pearson:.4f} (n={n_B}) | diff={diff:.4f} "
-        f"| z={z_stat:.3f} | p={p_val:.4g}"
+        f"""AI r={ai_pearson:.4f} (n={n_A}) | GE r={ge_pearson:.4f} (n={n_B}) | diff={diff:.4f} "
+        f"| z={z_stat:.3f} | p={p_val:.4g}"""
     )
     if p_val < 0.05:
         logger.success(f"Difference significant (p={p_val:.4g})")
@@ -540,10 +728,9 @@ def compare_mode_correlations(
 # --- END ADDED CODE ---
 
 
-def funding_agency(
-    input_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json",
-    output_path: Path = FIGURES_DIR / MODE / "top_5_agencies_by_year.html",
-):
+def funding_agency(MODE: str):
+    input_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json"
+    output_path: Path = FIGURES_DIR / MODE / "top_5_agencies_by_year.html"
     """
     This script reads publication data, identifies the top 5 funding agencies
     for each year based on total citations, and generates a stacked bar chart
@@ -614,7 +801,7 @@ def funding_agency(
     print(f"Non-null agencies: {grants_df['agency'].notna().sum()}")
     print(f"Unique agencies: {grants_df['agency'].nunique()}")
     if grants_df["agency"].notna().sum() > 0:
-        print(f"Sample agencies: {grants_df['agency'].dropna().head().tolist()}")
+        print(f"""Sample agencies: {grants_df["agency"].dropna().head().tolist()}""")
 
     # Clean and validate year data
     if "year" not in grants_df.columns:
@@ -630,7 +817,9 @@ def funding_agency(
     print("\nYear processing:")
     print(f"Valid years: {grants_df['year_clean'].notna().sum()}")
     if grants_df["year_clean"].notna().sum() > 0:
-        print(f"Year range: {grants_df['year_clean'].min()} to {grants_df['year_clean'].max()}")
+        print(
+            f"""Year range: {grants_df["year_clean"].min()} to {grants_df["year_clean"].max()}"""
+        )
 
     # Use citation_count if available, otherwise calculate from cited_by
     if "citation_count" in grants_df.columns:
@@ -660,7 +849,7 @@ def funding_agency(
         columns={"year_clean": "year", "citations": "citation_count"}, inplace=True
     )
 
-    print(f"\nAggregated data: {len(agency_citations_by_year)} agency-year combinations")
+    print(f"""\nAggregated data: {len(agency_citations_by_year)} agency-year combinations""")
 
     # Get the top 5 agencies for each year based on citations
     top_agencies_per_year = (
@@ -706,10 +895,9 @@ def funding_agency(
         print("pip install plotly")
 
 
-def funding_agency_number_of_papers(
-    input_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json",
-    output_path: Path = FIGURES_DIR / MODE / "top_5_agencies_by_year_number_of_papers.html",
-):
+def funding_agency_number_of_papers(MODE: str):
+    input_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json"
+    output_path: Path = FIGURES_DIR / MODE / "top_5_agencies_by_year_number_of_papers.html"
     """
     This script reads publication data, identifies the top 5 funding agencies
     for each year based on number of publications funded, and generates a stacked bar chart
@@ -780,7 +968,7 @@ def funding_agency_number_of_papers(
     print(f"Non-null agencies: {grants_df['agency'].notna().sum()}")
     print(f"Unique agencies: {grants_df['agency'].nunique()}")
     if grants_df["agency"].notna().sum() > 0:
-        print(f"Sample agencies: {grants_df['agency'].dropna().head().tolist()}")
+        print(f"""Sample agencies: {grants_df["agency"].dropna().head().tolist()}""")
 
     # Clean and validate year data
     if "year" not in grants_df.columns:
@@ -796,7 +984,9 @@ def funding_agency_number_of_papers(
     print("\nYear processing:")
     print(f"Valid years: {grants_df['year_clean'].notna().sum()}")
     if grants_df["year_clean"].notna().sum() > 0:
-        print(f"Year range: {grants_df['year_clean'].min()} to {grants_df['year_clean'].max()}")
+        print(
+            f"""Year range: {grants_df["year_clean"].min()} to {grants_df["year_clean"].max()}"""
+        )
 
     # Use publication count instead of citations
     # Each row is a publication-agency-year combination after explode
@@ -815,7 +1005,7 @@ def funding_agency_number_of_papers(
     )
     agency_pubs_by_year.rename(columns={"year_clean": "year"}, inplace=True)
 
-    print(f"\nAggregated data: {len(agency_pubs_by_year)} agency-year combinations")
+    print(f"""\nAggregated data: {len(agency_pubs_by_year)} agency-year combinations""")
 
     # Get the top 5 agencies for each year based on publication count
     top_agencies_per_year = (
@@ -861,12 +1051,11 @@ def funding_agency_number_of_papers(
         print("pip install plotly")
 
 
-def mesh_headings_network(
-    features_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json",
-    graph_path: Path = MODELS_DIR / MODE / "citation_model_with_communities.pkl",
-    mesh_xml_path: Path = RAW_DATA_DIR / "desc2025.xml",
-    output_csv: Path = PROCESSED_DATA_DIR / MODE / "edge_mesh_distances.csv",
-):
+def mesh_headings_network(MODE: str):
+    features_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json"
+    graph_path: Path = MODELS_DIR / MODE / "citation_model_with_communities.pkl"
+    mesh_xml_path: Path = RAW_DATA_DIR / "desc2025.xml"
+    output_csv: Path = PROCESSED_DATA_DIR / MODE / "edge_mesh_distances.csv"
     """
     Compute MeSH-based distances for all edges in the network and plot the graph with Plotly.
 
@@ -998,7 +1187,9 @@ def mesh_headings_network(
     # Compute distances per edge
     records = []
     logger.info(
-        f"Computing MeSH mean distances for all edges using graph attr '{vid_attr}' mapped to df column '{df_key_for_mapping}'..."
+        f"""Computing MeSH mean distances for all edges using graph attr '{
+            vid_attr
+        }' mapped to df column '{df_key_for_mapping}'..."""
     )
 
     id_to_headings = id_maps[df_key_for_mapping] if df_key_for_mapping in id_maps else {}
@@ -1028,14 +1219,14 @@ def mesh_headings_network(
     out_df = pd.DataFrame(records)
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_csv(output_csv, index=False)
-    logger.success(f"Saved MeSH edge distances to {output_csv} (n_edges={len(out_df)})")
+    logger.success(f"""Saved MeSH edge distances to {output_csv} (n_edges={len(out_df)})""")
 
     # Basic summary
     available = out_df["mesh_mean_distance"].dropna()
     if not available.empty:
         logger.info(
-            f"Distance stats | count={len(available)} mean={available.mean():.3f} "
-            f"median={available.median():.3f} std={available.std():.3f}"
+            f"""Distance stats | count={len(available)} mean={available.mean():.3f}"""
+            f"""median={available.median():.3f} std={available.std():.3f}"""
         )
     else:
         logger.warning("No edges had both endpoints with MeSH headings; no distances computed.")
@@ -1098,7 +1289,7 @@ def mesh_headings_network(
         title = df_titles.get(nid, "")
         year = df_years.get(nid, "")
         comm = comm_values[node_ids.index(nid)]
-        hover_text.append(f"id: {nid}<br>community: {comm}<br>year: {year}<br>{title}")
+        hover_text.append(f"""id: {nid}<br>community: {comm}<br>year: {year}<br>{title}""")
 
     # Edge distance bins (quantiles)
     edge_dist_map = {}
@@ -1146,7 +1337,9 @@ def mesh_headings_network(
                 continue
             xs += [coords[u, 0], coords[v, 0], None]
             ys += [coords[u, 1], coords[v, 1], None]
-            hover.append(f"{uid} — {vid}<br>MeSH mean distance: {d if not pd.isna(d) else 'NA'}")
+            hover.append(
+                f"""{uid} — {vid}<br>MeSH mean distance: {d if not pd.isna(d) else "NA"}"""
+            )
         if not xs:
             continue
         edge_traces.append(
@@ -1203,3 +1396,128 @@ def mesh_headings_network(
     out_html.parent.mkdir(parents=True, exist_ok=True)
     fig.write_html(out_html)
     logger.success(f"Interactive network saved to {out_html}")
+
+
+def plot_constraint(G: nx.Graph, MODE: str, constraints: dict):
+    import pandas as pd
+
+    output_path: Path = FIGURES_DIR / MODE / "constraints.html"
+
+    # Save community labels
+    nx.set_node_attributes(G, {n: constraints[n] for n in G.nodes()}, "constraint")
+
+    logger.info("Constraints calculated")
+
+    df = pd.DataFrame(
+        {
+            "pmid": nx.get_node_attributes(G, "title").keys(),
+            "title": nx.get_node_attributes(G, "title").values(),
+            "constraint": nx.get_node_attributes(G, "constraint").values(),
+        }
+    )
+
+    df.to_csv(FIGURES_DIR / MODE / "constraint_table.csv")
+
+    # Visualization
+    pos = nx.spring_layout(G, seed=42, k=0.15 if G.number_of_nodes() < 1000 else None)
+    x_coords = [pos[n][0] for n in G.nodes()]
+    y_coords = [pos[n][1] for n in G.nodes()]
+
+    node_titles = [data.get("title", f"Node {n}") for n, data in G.nodes(data=True)]
+
+    # Edges
+    edge_x, edge_y = [], []
+    edge_shapes = []
+    for u, v in G.edges():
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+        edge_shapes.append(
+            dict(
+                type="line",
+                x0=x0,
+                y0=y0,
+                x1=x1,
+                y1=y1,
+                line=dict(color="#888", width=0.5),
+                opacity=0.7,
+                layer="below",
+            )
+        )
+    node_trace = go.Scatter(
+        x=x_coords,
+        y=y_coords,
+        mode="markers",
+        hoverinfo="text",
+        text=[
+            f"Title: {title}<br>Constraint: {constraints[n]}"
+            for (n, data), title in zip(G.nodes(data=True), node_titles)
+        ],
+        marker=dict(
+            line=dict(width=2, color="white"),
+        ),
+    )
+    node_constraints = []
+    for n in constraints.keys():
+        node_constraints.append(constraints[n])
+    node_trace.marker.color = node_constraints
+    edge_trace = go.Scatter(
+        x=edge_x,
+        y=edge_y,
+        line=dict(width=0.5, color="#888"),
+        hoverinfo="none",
+        mode="lines",
+    )
+
+    fig = go.Figure(
+        data=[edge_trace, node_trace],
+        layout=go.Layout(
+            title=(f"Interactive Graph Visualization (Colored by constraints)<br>"),
+            showlegend=False,
+            hovermode="closest",
+            margin=dict(b=20, l=5, r=5, t=40),
+            annotations=[
+                dict(
+                    text="Hover over nodes to see titles",
+                    showarrow=False,
+                    xref="paper",
+                    yref="paper",
+                    x=0.005,
+                    y=-0.002,
+                    xanchor="left",
+                    yanchor="bottom",
+                    font=dict(color="gray", size=12),
+                )
+            ],
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            width=1800,
+            height=1200,
+            shapes=edge_shapes,
+        ),
+    )
+
+    fig.write_html(output_path)
+
+    png_output_path = output_path.with_suffix(".png")
+    fig.write_image(png_output_path, width=1200, height=800, scale=5)
+    logger.success(f"Successfully saved output images to path: {output_path}")
+
+
+def plot_cartographic_density(MODE) -> None:
+    import pandas as pd
+
+    df = pd.read_json(INTERIM_DATA_DIR / MODE / "features_with_ror.json")
+    print(df.head())
+    output_path: Path = FIGURES_DIR / MODE / "geo_density.html"
+    import plotly.express as px
+
+    fig = px.density_map(
+        df, lat="matched_lat", lon="matched_lon", radius=5, map_style="open-street-map", zoom=0
+    )
+    fig.update_layout(map_style="open-street-map", map_center_lon=0)
+    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+    fig.write_html(output_path)
+    fig.write_image(output_path.with_suffix(".png"), scale=4)
+    return None
