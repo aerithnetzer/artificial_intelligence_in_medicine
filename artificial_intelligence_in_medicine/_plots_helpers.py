@@ -60,108 +60,106 @@ def plot_communities(G: nx.Graph, MODE: str):
     print("Graph and labels saved. Visualizing...")
 
     # Visualization
-    try:
-        pos = nx.spring_layout(G, seed=42, k=0.15 if G.number_of_nodes() < 1000 else None)
-        x_coords = [pos[n][0] for n in G.nodes()]
-        y_coords = [pos[n][1] for n in G.nodes()]
+    pos = nx.spring_layout(G, seed=42, k=0.15 if G.number_of_nodes() < 1000 else None)
+    x_coords = [pos[n][0] for n in G.nodes()]
+    y_coords = [pos[n][1] for n in G.nodes()]
 
-        node_titles = [data.get("title", f"Node {n}") for n, data in G.nodes(data=True)]
+    node_titles = [data.get("title", f"Node {n}") for n, data in G.nodes(data=True)]
 
-        colors_discrete = px.colors.qualitative.Set1 + px.colors.qualitative.Set3
-        node_colors = [
-            colors_discrete[data["community"] % len(colors_discrete)]
-            for n, data in G.nodes(data=True)
-        ]
+    colors_discrete = px.colors.qualitative.Set1 + px.colors.qualitative.Set3
+    node_colors = [
+        colors_discrete[data["community"] % len(colors_discrete)] for n, data in G.nodes(data=True)
+    ]
 
-        # Edges
-        edge_x, edge_y = [], []
-        edge_shapes = []
-        for u, v in G.edges():
-            x0, y0 = pos[u]
-            x1, y1 = pos[v]
-            edge_x.extend([x0, x1, None])
-            edge_y.extend([y0, y1, None])
-            edge_shapes.append(
-                dict(
-                    type="line",
-                    x0=x0,
-                    y0=y0,
-                    x1=x1,
-                    y1=y1,
-                    line=dict(color="#888", width=0.5),
-                    opacity=0.7,
-                    layer="below",
-                )
+    # Edges
+    edge_x, edge_y = [], []
+    edge_shapes = []
+    for u, v in G.edges():
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+        edge_shapes.append(
+            dict(
+                type="line",
+                x0=x0,
+                y0=y0,
+                x1=x1,
+                y1=y1,
+                line=dict(color="#888", width=0.5),
+                opacity=0.7,
+                layer="below",
             )
-
-        # Node sizes
-        citation_counts = [
-            len(data.get("cited_by", [])) if data.get("cited_by") else 0
-            for _, data in G.nodes(data=True)
-        ]
-        node_sizes = [10 + 2 * np.log(c + 1) for c in citation_counts]
-        print(len(node_sizes), "node sizes calculated")
-
-        node_trace = go.Scatter(
-            x=x_coords,
-            y=y_coords,
-            mode="markers",
-            hoverinfo="text",
-            text=[
-                f"Title: {title}<br>"
-                f"Community: {data['community_label']}<br>"
-                f"Cited by: {len(data.get('cited_by', []))}"
-                for (n, data), title in zip(G.nodes(data=True), node_titles)
-            ],
-            marker=dict(size=node_sizes, color=node_colors, line=dict(width=2, color="white")),
         )
 
-        edge_trace = go.Scatter(
-            x=edge_x,
-            y=edge_y,
-            line=dict(width=0.5, color="#888"),
-            hoverinfo="none",
-            mode="lines",
-        )
+    # Node sizes
+    citation_counts = [
+        len(data.get("cited_by", [])) if data.get("cited_by") else 0
+        for _, data in G.nodes(data=True)
+    ]
+    node_sizes = [10 + 2 * np.log(c + 1) for c in citation_counts]
 
-        fig = go.Figure(
-            data=[edge_trace, node_trace],
-            layout=go.Layout(
-                title=(
-                    f"Interactive Graph Visualization<br>"
-                    f"{len(set(communities.values()))} communities, "
-                ),
-                showlegend=False,
-                hovermode="closest",
-                margin=dict(b=20, l=5, r=5, t=40),
-                annotations=[
-                    dict(
-                        text="Hover over nodes to see titles",
-                        showarrow=False,
-                        xref="paper",
-                        yref="paper",
-                        x=0.005,
-                        y=-0.002,
-                        xanchor="left",
-                        yanchor="bottom",
-                        font=dict(color="gray", size=12),
-                    )
-                ],
-                xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                width=1800,
-                height=1200,
-                shapes=edge_shapes,
+    node_trace = go.Scatter(
+        x=x_coords,
+        y=y_coords,
+        mode="markers",
+        hoverinfo="text",
+        text=[
+            f"Title: {title}<br>"
+            f"Community: {data['community_label']}<br>"
+            f"Cited by: {len(data.get('cited_by', []))}"
+            for (n, data), title in zip(G.nodes(data=True), node_titles)
+        ],
+        marker=dict(size=node_sizes, color=node_colors, line=dict(width=2, color="white")),
+    )
+
+    edge_trace = go.Scatter(
+        x=edge_x,
+        y=edge_y,
+        line=dict(width=0.5, color="#888"),
+        hoverinfo="none",
+        mode="lines",
+    )
+
+    fig = go.Figure(
+        data=[edge_trace, node_trace],
+        layout=go.Layout(
+            title=(
+                f"Interactive Graph Visualization<br>"
+                f"{len(set(communities.values()))} communities, "
             ),
-        )
+            showlegend=False,
+            hovermode="closest",
+            margin=dict(b=20, l=5, r=5, t=40),
+            annotations=[
+                dict(
+                    text="Hover over nodes to see titles",
+                    showarrow=False,
+                    xref="paper",
+                    yref="paper",
+                    x=0.005,
+                    y=-0.002,
+                    xanchor="left",
+                    yanchor="bottom",
+                    font=dict(color="gray", size=12),
+                )
+            ],
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            width=1800,
+            height=1200,
+            shapes=edge_shapes,
+        ),
+    )
 
-        fig.write_html(output_path)
+    fig.write_html(output_path)
 
-        png_output_path = output_path.with_suffix(".png")
-        fig.write_image(png_output_path, width=1200, height=800, scale=5)
-
-    except Exception as e:
-        print(f"Could not plot communities: {e}")
+    png_output_path = output_path.with_suffix(".png")
+    fig.write_image(png_output_path, width=1200, height=800, scale=5)
+    return G
+    # except Exception as e:
+    #     print(f"Could not plot communities: {e}")
+    #     return e
 
 
 def plot_horizontal_timeline(G, MODE: str):

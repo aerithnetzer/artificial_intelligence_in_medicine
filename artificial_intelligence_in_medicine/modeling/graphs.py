@@ -13,6 +13,7 @@ from artificial_intelligence_in_medicine._plots_helpers import (
 from artificial_intelligence_in_medicine.modeling._graphs_helpers import (
     assign_community_labels,
     assign_countries_from_latlon,
+    plot_constraints_by_community,
     plot_constraints_by_country,
     assign_countries_from_latlon,
     calculate_constraint,
@@ -51,15 +52,19 @@ def main():
             G=G,
             inflection_point=inflection_point,
         )
-
-        g = assign_countries_from_latlon(g)
+        plot_normalized_articles_over_time(MODE)
+        _ = assign_countries_from_latlon(g)
+        try:
+            _ = plot_communities(g, MODE)
+        except Exception as e:
+            logger.critical(f"You are bad at coding. \n{e}")
         # 4. Sanity check: communities exist
         communities = nx.get_node_attributes(g, "community")
-        logger.info(f"Communities: {communities}")
 
         # 5. Compute constraints ON THE SAME GRAPH that has year attributes
         constraints = nx.constraint(g)
 
+        plot_constraints_by_community(g, constraints, MODE)
         plot_constraints_by_country(g, constraints, MODE)
         # 6. Plot constraints using THE SAME GRAPH
         plot_constraint(g, MODE, constraints)

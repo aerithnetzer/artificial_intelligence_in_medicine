@@ -126,15 +126,13 @@ def plot_constraints_over_time(G, constraints, MODE):
 
     for node in G.nodes():
         if node in constraints:
-            print("Found node in constraints")
             year = G.nodes[node].get("year")
             if year is not None:
                 if year not in year_constraint_data:
                     year_constraint_data[year] = []
                 year_constraint_data[year].append(constraints[node])
-                print(constraints[node])
         else:
-            print("No node found")
+            continue
 
     # Calculate median constraint for each year
     years = sorted(year_constraint_data.keys())
@@ -401,7 +399,6 @@ def community_detection(mode: str, G: nx.Graph | Path, inflection_point: int) ->
     else:
         communities = {n: i for i, n in enumerate(g.nodes())}
         modularity_score = 0.0
-    logger.info(f"Communities: {communities}")
     # Assign community membership
     nx.set_node_attributes(g, communities, "community")
     return g
@@ -543,6 +540,70 @@ def assign_countries_from_latlon(G):
     nx.set_node_attributes(G, country_map, "country")
 
     return G
+
+
+def plot_constraints_by_community(G, constraints, MODE, min_articles=5):
+    """
+    Plot constraint distributions by country using violins.
+
+    Parameters
+    ----------
+    G : networkx.Graph
+        Graph with 'country' attribute on nodes
+    constraints : dict
+        Output of nx.constraint(G)
+    MODE : str
+        Mode name for labeling
+    """
+    import plotly.graph_objects as go
+    from collections import defaultdict
+
+    community_constraints = defaultdict(list)
+
+    for node, c in constraints.items():
+        community = G.nodes[node].get("community_label")
+        if community is not None:
+            community_constraints[community].append(c)
+
+    # Filter small-N communities
+    community_constraints = {
+        c: vals for c, vals in community_constraints.items() if len(vals) >= min_articles
+    }
+
+    # Sort by median constraint
+    communities = sorted(
+        community_constraints.keys(),
+        key=lambda c: sum(community_constraints[c]) / len(community_constraints[c]),
+    )
+
+    fig = go.Figure()
+
+    for community in communities:
+        fig.add_trace(
+            go.Violin(
+                x=[str(community)] * len(community_constraints[community]),
+                y=community_constraints[community],
+                name=str(community),
+                box_visible=True,
+                meanline_visible=True,
+                showlegend=False,
+            )
+        )
+
+    fig.update_layout(
+        title=f"Constraint Distributions by Community ({MODE})",
+        xaxis_title="Community",
+        yaxis_title="Constraint",
+        template="plotly_white",
+        width=1200,
+        height=600,
+    )
+
+    output_path = FIGURES_DIR / MODE / "constraints_by_community.html"
+    fig.write_html(output_path)
+    logger.info(f"Saved constraints-by-community plot to {output_path}")
+
+    return fig
 
 
 def plot_constraints_by_country(G, constraints, MODE, min_articles=20):
