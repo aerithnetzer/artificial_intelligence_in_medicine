@@ -1519,3 +1519,159 @@ def plot_cartographic_density(MODE) -> None:
     fig.write_html(output_path)
     fig.write_image(output_path.with_suffix(".png"), scale=4)
     return None
+
+
+import numpy as np
+import networkx as nx
+import plotly.graph_objects as go
+
+
+def _cosine_sim_matrix(X: np.ndarray) -> np.ndarray:
+    # X: (n, d)
+    X = X.astype(np.float32)
+    norms = np.linalg.norm(X, axis=1, keepdims=True)
+    norms = np.clip(norms, 1e-12, None)
+    Xn = X / norms
+    return Xn @ Xn.T
+
+
+def plot_semantic_graph(
+    g: nx.Graph,
+    embedding_attr: str = "embedding",
+    min_degree: int = 23,
+    top_k: int = 8,
+    min_similarity: float = 0.35,
+    layout: str = "spring",
+    seed: int = 42,
+):
+    """
+    Build a semantic similarity graph from node embeddings for
+    sufficiently connected nodes only, drop isolated nodes,
+    and plot it with Plotly.
+
+    Args:
+        g: input NetworkX graph (nodes must have embedding_attr)
+        embedding_attr: node attribute name containing embedding vectors
+        min_degree: minimum degree in original graph to be considered
+        top_k: per-node number of strongest similarity edges to keep
+        min_similarity: minimum cosine similarity to keep an edge
+        layout: "spring" or "kamada_kawai"
+        seed: RNG seed for layout reproducibility
+    """
+
+    # --- filter nodes by connectivity in original graph ---
+    eligible_nodes = {n for n in g.nodes() if g.degree(n) > min_degree}
+
+    if len(eligible_nodes) < 2:
+        raise ValueError(
+            f"Need at least 2 nodes with degree > {min_degree} to build a semantic graph."
+        )
+
+    # --- collect embeddings only for eligible nodes ---
+    nodes = []
+    embs = []
+    for n in eligible_nodes:
+        emb = g.nodes[n].get(embedding_attr, None)
+        if emb is None:
+            continue
+        nodes.append(n)
+        embs.append(np.asarray(emb, dtype=np.float32))
+
+    if len(nodes) < 2:
+        raise ValueError(
+            "Need at least 2 eligible nodes with embeddings to build a semantic graph."
+        )
+
+    X = np.vstack(embs)  # (n, d)
+
+    # --- cosine similarity matrix ---
+    S = _cosine_sim_matrix(X)
+    np.fill_diagonal(S, -1.0)  # prevent self edges
+
+    # --- build semantic graph ---
+    sg = nx.DiGraph()
+    sg.add_nodes_from(nodes)
+
+    n = len(nodes)
+    for i in range(n):
+        # best candidates for node i
+        idx = np.argpartition(S[i], -top_k)[-top_k:]
+        idx = idx[np.argsort(S[i, idx])[::-1]]
+
+        for j in idx:
+            sim = float(S[i, j])
+            if sim >= min_similarity:
+                sg.add_edge(nodes[i], nodes[j], weight=sim)
+
+    # --- remove isolated nodes ---
+    sg.remove_nodes_from([n for n in sg.nodes() if sg.in_degree(n) == 0 and sg.out_degree(n) == 0])
+
+    if sg.number_of_nodes() == 0:
+        raise ValueError(
+            "No nodes left after filtering isolates (try lowering min_similarity or min_degree)."
+        )
+
+    # --- layout ---
+    if layout == "kamada_kawai":
+        pos = nx.kamada_kawai_layout(sg)
+    else:
+        pos = nx.spring_layout(sg, seed=seed, k=None, iterations=200)
+
+    # --- edges for plotly ---
+    edge_x, edge_y = [], []
+    for u, v in sg.edges():
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        edge_x += [x0, x1, None]
+        edge_y += [y0, y1, None]
+
+    edge_trace = go.Scatter(
+        x=edge_x,
+        y=edge_y,
+        mode="lines",
+        line=dict(width=1),
+        hoverinfo="none",
+        name="similarity edges",
+    )
+
+    # --- nodes for plotly ---
+    node_x, node_y, node_text, node_deg = [], [], [], []
+    for n in sg.nodes():
+        x, y = pos[n]
+        node_x.append(x)
+        node_y.append(y)
+        d = int(sg.in_degree(n) + sg.out_degree(n))
+        node_deg.append(d)
+        node_text.append(f"{n}<br>deg={d}")
+
+    node_trace = go.Scatter(
+        x=node_x,
+        y=node_y,
+        mode="markers+text",
+        text=[str(n) for n in sg.nodes()],
+        textposition="top center",
+        hovertext=node_text,
+        hoverinfo="text",
+        marker=dict(
+            size=[6 + 2 * d for d in node_deg],
+            line=dict(width=1),
+        ),
+        name="nodes",
+    )
+
+    fig = go.Figure(data=[edge_trace, node_trace])
+    fig.update_layout(
+        title=f"Semantic Graph (deg>{min_degree}, top_k={top_k}, min_sim={min_similarity})",
+        showlegend=False,
+        hovermode="closest",
+        margin=dict(l=10, r=10, t=50, b=10),
+        xaxis=dict(showgrid=False, zeroline=False, visible=False),
+        yaxis=dict(showgrid=False, zeroline=False, visible=False),
+    )
+
+    return fig, sg
+
+
+# Example:
+# fig, semantic_g = plot_semantic_graph(G, embedding_attr="embedding", top_k=10, min_similarity=0.4)
+# fig.show()

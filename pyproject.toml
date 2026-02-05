@@ -40,6 +40,7 @@ dependencies = [
     "ruff",
     "scikit-learn>=1.7.1",
     "seaborn>=0.13.2",
+    "sentence-transformers>=5.2.2",
     "tqdm",
     "typer",
 ]
@@ -58,3 +59,7 @@ extend-select = ["I"]  # Add import sorting
 known-first-party = ["artificial_intelligence_in_medicine"]
 force-sort-within-sections = true
 
+[tool.basedpyright]
+typeCheckingMode = "off"
+diagnosticMode = "openFilesOnly"
+useLibraryCodeForTypes = false

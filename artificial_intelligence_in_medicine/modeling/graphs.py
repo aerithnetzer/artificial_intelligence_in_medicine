@@ -4,6 +4,7 @@ import typer
 import artificial_intelligence_in_medicine
 from artificial_intelligence_in_medicine._plots_helpers import (
     plot_communities,
+    plot_semantic_graph,
     plot_communities_vertical_barchart,
     plot_horizontal_timeline,
     plot_constraint,
@@ -22,6 +23,7 @@ from artificial_intelligence_in_medicine.modeling._graphs_helpers import (
     initialize_graph,
     calculate_inflection_point,
     plot_constraints_over_time,
+    generate_embeddings,
 )
 
 app = typer.Typer()
@@ -36,6 +38,8 @@ def main():
         # 1. Initialize base graph (contains year, metadata, etc.)
         G: nx.DiGraph[str] = initialize_graph(MODE)
 
+        G = generate_embeddings(G, "title")
+        plot_semantic_graph(G, "embedding")
         all_keys = set()
 
         for _, attrs in G.nodes(data=True):

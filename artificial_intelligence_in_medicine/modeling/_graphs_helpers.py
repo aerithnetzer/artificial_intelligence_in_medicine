@@ -16,6 +16,7 @@ from artificial_intelligence_in_medicine.config import (
     INTERIM_DATA_DIR,
     MODELS_DIR,
 )
+from sentence_transformers import SentenceTransformer
 
 
 def load_graph(graph_path):
@@ -670,3 +671,15 @@ def plot_constraints_by_country(G, constraints, MODE, min_articles=20):
     logger.info(f"Saved constraints-by-country plot to {output_path}")
 
     return fig
+
+
+def generate_embeddings(g: nx.DiGraph, attribute):
+    titles = g.get_node_attributes("title")
+
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+
+    embeddings = model.encode(titles, show_progress_bar=True)
+
+    g = nx.set_node_attributes("embbedding", embeddings)
+
+    return g

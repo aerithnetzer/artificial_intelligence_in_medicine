@@ -48,6 +48,7 @@ def get_institution_location_data(
     print(df["affiliation"].nunique(), "unique affiliations")
     print(df["affiliation"].head())
     df.to_parquet(output_path, index=False)
+    return df
 
 
 def flatten_data_to_parquet(
@@ -301,6 +302,7 @@ def get_affiliation_coordinate_data(mode: str = "ARTIFICIAL_INTELLIGENCE"):
     df.to_json(output_path, index=False)
     logger.info(f"Data with ROR features saved to {output_path}")
     logger.info(f"Data has columns: {df.columns.tolist()}")
+    return df
 
 
 def citation_data(input_path: str, output_path: str):

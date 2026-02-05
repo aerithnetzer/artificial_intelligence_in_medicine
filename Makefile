@@ -52,9 +52,6 @@ create_environment:
 	@echo ">>> Windows: .\\\\.venv\\\\Scripts\\\\activate"
 	@echo ">>> Unix/macOS: source ./.venv/bin/activate"
 
-
-
-
 #################################################################################
 # PROJECT RULES                                                                 #
 #################################################################################
@@ -63,7 +60,7 @@ create_environment:
 ## Make dataset
 .PHONY: data
 data: requirements
-	$(PYTHON_INTERPRETER) artificial_intelligence_in_medicine/dataset.py
+	uv run artificial_intelligence_in_medicine/dataset.py
 
 
 #################################################################################
