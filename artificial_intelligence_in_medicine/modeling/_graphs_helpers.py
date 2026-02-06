@@ -1,7 +1,7 @@
 from pathlib import Path
 import pickle
 from typing import Any, Counter
-
+import numpy as np
 from loguru import logger
 import networkx as nx
 from networkx.algorithms.community import greedy_modularity_communities
@@ -673,13 +673,61 @@ def plot_constraints_by_country(G, constraints, MODE, min_articles=20):
     return fig
 
 
-def generate_embeddings(g: nx.DiGraph, attribute):
-    titles = g.get_node_attributes("title")
+def generate_embeddings(
+    g: nx.Graph,
+    text_attr: str,
+    embedding_attr: str = "embedding",
+    model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+    batch_size: int = 64,
+    normalize: bool = True,
+):
+    """
+    Generate sentence-transformer embeddings for node text attributes
+    and store them on the graph.
 
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    Args:
+        g: NetworkX graph
+        text_attr: node attribute containing text (e.g. "title")
+        embedding_attr: node attribute name to store embeddings
+        model_name: sentence-transformers model name
+        batch_size: encoding batch size
+        normalize: whether to L2-normalize embeddings
+    """
 
-    embeddings = model.encode(titles, show_progress_bar=True)
+    model = SentenceTransformer(model_name)
 
-    g = nx.set_node_attributes("embbedding", embeddings)
+    # --- collect nodes with text ---
+    nodes = []
+    texts = []
+    for n, data in g.nodes(data=True):
+        text = data.get(text_attr)
+        if isinstance(text, str) and text.strip():
+            nodes.append(n)
+            texts.append(text)
+
+    if not nodes:
+        raise ValueError(f"No nodes found with text attribute '{text_attr}'")
+
+    # --- encode in batches ---
+    embeddings = []
+    for i in tqdm(range(0, len(texts), batch_size), desc="Batches"):
+        batch = texts[i : i + batch_size]
+        emb = model.encode(
+            batch,
+            convert_to_numpy=True,
+            normalize_embeddings=normalize,
+            show_progress_bar=False,
+        )
+        embeddings.append(emb)
+
+    embeddings = np.vstack(embeddings)  # (N, d)
+
+    # --- attach to graph ---
+    emb_dict = {
+        node: emb
+        for node, emb in zip(nodes, embeddings)
+    }
+
+    nx.set_node_attributes(g, emb_dict, embedding_attr)
 
     return g

@@ -37,9 +37,11 @@ def main():
     for MODE in MODES:
         # 1. Initialize base graph (contains year, metadata, etc.)
         G: nx.DiGraph[str] = initialize_graph(MODE)
-
-        G = generate_embeddings(G, "title")
-        plot_semantic_graph(G, "embedding")
+        G = generate_embeddings(G, text_attr= "title",)
+        if MODE == "GENE_EXPRESSION":
+            plot_semantic_graph(G, MODE, "embedding", min_degree=10)
+        else:
+            plot_semantic_graph(G, MODE, "embedding")
         all_keys = set()
 
         for _, attrs in G.nodes(data=True):

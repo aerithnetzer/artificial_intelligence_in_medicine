@@ -26,12 +26,15 @@ def plot_communities(G: nx.Graph, MODE: str):
     output_path: Path = FIGURES_DIR / MODE / "communities.html"
     communities = nx.get_node_attributes(G, "community")
     community_names = {}
-    if nx.get_node_attributes(G, "title"):
+
+    # --- Build community labels using top TF-IDF terms ---
+    titles_attr = nx.get_node_attributes(G, "title")
+    if titles_attr:
         community_titles = defaultdict(list)
         for n, data in G.nodes(data=True):
             community_id = data.get("community")
             title = data.get("title")
-            if title:
+            if community_id is not None and title:
                 community_titles[community_id].append(title)
 
         for community_id, titles in community_titles.items():
@@ -46,32 +49,31 @@ def plot_communities(G: nx.Graph, MODE: str):
             else:
                 community_names[community_id] = f"Community {community_id}"
     else:
-        community_names = {
-            i: f"""Community {i}
-            """
-            for i in set(communities.values())
-        }
+        # Fallback if no titles exist
+        community_names = {i: f"Community {i}" for i in set(communities.values())}
 
-    # Save community labels
+    # --- Assign community labels to nodes ---
     nx.set_node_attributes(
-        G, {n: community_names[communities[n]] for n in G.nodes()}, "community_label"
+        G, {n: community_names.get(communities.get(n), f"Community {communities.get(n)}") for n in G.nodes()},
+        "community_label"
     )
 
     print("Graph and labels saved. Visualizing...")
 
-    # Visualization
+    # --- Layout ---
     pos = nx.spring_layout(G, seed=42, k=0.15 if G.number_of_nodes() < 1000 else None)
     x_coords = [pos[n][0] for n in G.nodes()]
     y_coords = [pos[n][1] for n in G.nodes()]
 
+    # --- Node properties ---
     node_titles = [data.get("title", f"Node {n}") for n, data in G.nodes(data=True)]
-
     colors_discrete = px.colors.qualitative.Set1 + px.colors.qualitative.Set3
     node_colors = [
-        colors_discrete[data["community"] % len(colors_discrete)] for n, data in G.nodes(data=True)
+        colors_discrete[data.get("community", 0) % len(colors_discrete)]
+        for _, data in G.nodes(data=True)
     ]
 
-    # Edges
+    # --- Edge positions ---
     edge_x, edge_y = [], []
     edge_shapes = []
     for u, v in G.edges():
@@ -92,24 +94,27 @@ def plot_communities(G: nx.Graph, MODE: str):
             )
         )
 
-    # Node sizes
+    # --- Node sizes based on citations ---
     citation_counts = [
-        len(data.get("cited_by", [])) if data.get("cited_by") else 0
+        len(data.get("cited_by") or [])  # safe even if cited_by is None
         for _, data in G.nodes(data=True)
     ]
     node_sizes = [10 + 2 * np.log(c + 1) for c in citation_counts]
+
+    # --- Hover text ---
+    node_hover_texts = [
+        f"Title: {title}<br>"
+        f"Community: {data.get('community_label', 'Unknown')}<br>"
+        f"Cited by: {len(data.get('cited_by') or [])}"
+        for (n, data), title in zip(G.nodes(data=True), node_titles)
+    ]
 
     node_trace = go.Scatter(
         x=x_coords,
         y=y_coords,
         mode="markers",
         hoverinfo="text",
-        text=[
-            f"Title: {title}<br>"
-            f"Community: {data['community_label']}<br>"
-            f"Cited by: {len(data.get('cited_by', []))}"
-            for (n, data), title in zip(G.nodes(data=True), node_titles)
-        ],
+        text=node_hover_texts,
         marker=dict(size=node_sizes, color=node_colors, line=dict(width=2, color="white")),
     )
 
@@ -124,10 +129,7 @@ def plot_communities(G: nx.Graph, MODE: str):
     fig = go.Figure(
         data=[edge_trace, node_trace],
         layout=go.Layout(
-            title=(
-                f"Interactive Graph Visualization<br>"
-                f"{len(set(communities.values()))} communities, "
-            ),
+            title=f"Interactive Graph Visualization<br>{len(set(communities.values()))} communities",
             showlegend=False,
             hovermode="closest",
             margin=dict(b=20, l=5, r=5, t=40),
@@ -152,10 +154,11 @@ def plot_communities(G: nx.Graph, MODE: str):
         ),
     )
 
+    # --- Save outputs ---
     fig.write_html(output_path)
-
     png_output_path = output_path.with_suffix(".png")
     fig.write_image(png_output_path, width=1200, height=800, scale=5)
+
     return G
     # except Exception as e:
     #     print(f"Could not plot communities: {e}")
@@ -1537,29 +1540,16 @@ def _cosine_sim_matrix(X: np.ndarray) -> np.ndarray:
 
 def plot_semantic_graph(
     g: nx.Graph,
+    MODE,
     embedding_attr: str = "embedding",
+    title_attr: str = "title",
     min_degree: int = 23,
-    top_k: int = 8,
-    min_similarity: float = 0.35,
+    top_k: int = 4,
+    min_similarity: float = 0.6,
     layout: str = "spring",
     seed: int = 42,
 ):
-    """
-    Build a semantic similarity graph from node embeddings for
-    sufficiently connected nodes only, drop isolated nodes,
-    and plot it with Plotly.
-
-    Args:
-        g: input NetworkX graph (nodes must have embedding_attr)
-        embedding_attr: node attribute name containing embedding vectors
-        min_degree: minimum degree in original graph to be considered
-        top_k: per-node number of strongest similarity edges to keep
-        min_similarity: minimum cosine similarity to keep an edge
-        layout: "spring" or "kamada_kawai"
-        seed: RNG seed for layout reproducibility
-    """
-
-    # --- filter nodes by connectivity in original graph ---
+    # --- filter nodes by connectivity ---
     eligible_nodes = {n for n in g.nodes() if g.degree(n) > min_degree}
 
     if len(eligible_nodes) < 2:
@@ -1567,34 +1557,30 @@ def plot_semantic_graph(
             f"Need at least 2 nodes with degree > {min_degree} to build a semantic graph."
         )
 
-    # --- collect embeddings only for eligible nodes ---
+    # --- collect embeddings ---
     nodes = []
     embs = []
     for n in eligible_nodes:
-        emb = g.nodes[n].get(embedding_attr, None)
+        emb = g.nodes[n].get(embedding_attr)
         if emb is None:
             continue
         nodes.append(n)
         embs.append(np.asarray(emb, dtype=np.float32))
 
     if len(nodes) < 2:
-        raise ValueError(
-            "Need at least 2 eligible nodes with embeddings to build a semantic graph."
-        )
+        raise ValueError("Need at least 2 eligible nodes with embeddings.")
 
-    X = np.vstack(embs)  # (n, d)
+    X = np.vstack(embs)
 
-    # --- cosine similarity matrix ---
+    # --- cosine similarity ---
     S = _cosine_sim_matrix(X)
-    np.fill_diagonal(S, -1.0)  # prevent self edges
+    np.fill_diagonal(S, -1.0)
 
-    # --- build semantic graph ---
+    # --- semantic graph ---
     sg = nx.DiGraph()
     sg.add_nodes_from(nodes)
 
-    n = len(nodes)
-    for i in range(n):
-        # best candidates for node i
+    for i in range(len(nodes)):
         idx = np.argpartition(S[i], -top_k)[-top_k:]
         idx = idx[np.argsort(S[i, idx])[::-1]]
 
@@ -1603,63 +1589,86 @@ def plot_semantic_graph(
             if sim >= min_similarity:
                 sg.add_edge(nodes[i], nodes[j], weight=sim)
 
-    # --- remove isolated nodes ---
-    sg.remove_nodes_from([n for n in sg.nodes() if sg.in_degree(n) == 0 and sg.out_degree(n) == 0])
+    # --- drop isolates ---
+    sg.remove_nodes_from(
+        [n for n in sg.nodes() if sg.in_degree(n) == 0 and sg.out_degree(n) == 0]
+    )
 
     if sg.number_of_nodes() == 0:
-        raise ValueError(
-            "No nodes left after filtering isolates (try lowering min_similarity or min_degree)."
-        )
+        raise ValueError("No nodes left after filtering isolates.")
 
     # --- layout ---
     if layout == "kamada_kawai":
         pos = nx.kamada_kawai_layout(sg)
     else:
-        pos = nx.spring_layout(sg, seed=seed, k=None, iterations=200)
+        pos = nx.spring_layout(sg, seed=seed, iterations=200)
+    from networkx.algorithms.structuralholes import constraint
 
-    # --- edges for plotly ---
-    edge_x, edge_y = [], []
-    for u, v in sg.edges():
+    constraints = constraint(sg)
+    # --- edge widths from similarity ---
+    weights = np.array([d["weight"] for _, _, d in sg.edges(data=True)])
+    w_min, w_max = weights.min(), weights.max()
+    widths = 0.5 + 2.5 * (weights - w_min) / (w_max - w_min + 1e-8)
+
+    edge_traces = []
+    for (u, v, d), w in zip(sg.edges(data=True), widths):
         x0, y0 = pos[u]
         x1, y1 = pos[v]
-        edge_x += [x0, x1, None]
-        edge_y += [y0, y1, None]
+        edge_traces.append(
+            go.Scatter(
+                x=[x0, x1],
+                y=[y0, y1],
+                mode="lines",
+                line=dict(
+                    width=w,
+                    color="rgba(150,150,150,0.6)",  # <-- uniform gray
+                ),
+                hoverinfo="none",
+                showlegend=False,
+            )
+        )
 
-    edge_trace = go.Scatter(
-        x=edge_x,
-        y=edge_y,
-        mode="lines",
-        line=dict(width=1),
-        hoverinfo="none",
-        name="similarity edges",
-    )
+    # --- node hover labels (title only) ---
+    node_x = []
+    node_y = []
+    hovertext = []
 
-    # --- nodes for plotly ---
-    node_x, node_y, node_text, node_deg = [], [], [], []
+    c_vals = np.array([constraints[n] for n in sg.nodes()])
+    c_min, c_max = c_vals.min(), c_vals.max()
+
+# normalize to [0, 1]
+    c_norm = (c_vals - c_min) / (c_max - c_min + 1e-8)
+    node_x = []
+    node_y = []
+    hovertext = []
+
     for n in sg.nodes():
         x, y = pos[n]
         node_x.append(x)
         node_y.append(y)
-        d = int(sg.in_degree(n) + sg.out_degree(n))
-        node_deg.append(d)
-        node_text.append(f"{n}<br>deg={d}")
+        hovertext.append(g.nodes[n].get(title_attr, str(n)))
 
     node_trace = go.Scatter(
         x=node_x,
         y=node_y,
-        mode="markers+text",
-        text=[str(n) for n in sg.nodes()],
-        textposition="top center",
-        hovertext=node_text,
+        mode="markers",
+        hovertext=hovertext,
         hoverinfo="text",
         marker=dict(
-            size=[6 + 2 * d for d in node_deg],
-            line=dict(width=1),
+            size=6,
+            color=c_norm,
+            colorscale="Greys",
+            reversescale=True,  # <-- low constraint = light
+            line=dict(width=0.5, color="black"),
+            colorbar=dict(
+                title="Constraint",
+                thickness=10,
+            ),
         ),
         name="nodes",
     )
 
-    fig = go.Figure(data=[edge_trace, node_trace])
+    fig = go.Figure(data=edge_traces + [node_trace])
     fig.update_layout(
         title=f"Semantic Graph (deg>{min_degree}, top_k={top_k}, min_sim={min_similarity})",
         showlegend=False,
@@ -1669,9 +1678,5 @@ def plot_semantic_graph(
         yaxis=dict(showgrid=False, zeroline=False, visible=False),
     )
 
+    fig.write_html(FIGURES_DIR / MODE / "semanticgraph.html")
     return fig, sg
-
-
-# Example:
-# fig, semantic_g = plot_semantic_graph(G, embedding_attr="embedding", top_k=10, min_similarity=0.4)
-# fig.show()
