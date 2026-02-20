@@ -297,7 +297,7 @@ def initialize_graph(mode: str):
             source_pmid = str(row[pmid_column])
             for cited_pmid in cited_by_list:
                 cited_pmid_str = str(cited_pmid)
-                if cited_pmid_str in pmid_set:
+                if cited_pmid_str in pmid_set and row["pmid"] != cited_pmid_str:
                     G.add_edge(source_pmid, cited_pmid_str)
         else:
             continue
@@ -312,6 +312,11 @@ def initialize_graph(mode: str):
 
     return G
 
+def graph_visualization(G: nx.Graph):
+    
+
+
+    return None
 
 def find_central_nodes(mode: str = "ARTIFICIAL_INTELLIGENCE"):
     graph: Path | nx.Graph = MODELS_DIR / mode / "citation_model.pkl"

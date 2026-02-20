@@ -1680,3 +1680,174 @@ def plot_semantic_graph(
 
     fig.write_html(FIGURES_DIR / MODE / "semanticgraph.html")
     return fig, sg
+
+def visualize_graph(G, output_path, n_bins: int = 5):
+    logger.info("Computing layout")
+    pos = nx.spring_layout(G, seed=42, iterations=10)
+
+    # ------------------------------------------------------------
+    # 1️⃣ Structural Constraint
+    # ------------------------------------------------------------
+    logger.info("Computing structural constraint")
+
+    if isinstance(G, nx.DiGraph):
+        constraint_dict = nx.constraint(G.to_undirected())
+    else:
+        constraint_dict = nx.constraint(G)
+
+    nodes = list(G.nodes())
+    constraint_values = np.array([constraint_dict[n] for n in nodes])
+
+    # Identify valid values
+    valid_mask = ~np.isnan(constraint_values)
+    valid_values = constraint_values[valid_mask]
+
+    if len(valid_values) == 0:
+        raise ValueError("All constraint values are NaN. Graph too sparse.")
+
+    # ------------------------------------------------------------
+    # 2️⃣ Quantile Binning (ONLY valid values)
+    # ------------------------------------------------------------
+    bins = np.quantile(valid_values, np.linspace(0, 1, n_bins + 1))
+
+    # Assign bins (default -1 for NaNs)
+    binned = np.full(len(nodes), -1)
+    binned[valid_mask] = np.digitize(
+        valid_values, bins[1:-1]
+    )
+
+    # ------------------------------------------------------------
+    # 3️⃣ Strong Categorical Colors
+    # ------------------------------------------------------------
+    categorical_palette = [
+        "#e41a1c",  # red
+        "#377eb8",  # blue
+        "#4daf4a",  # green
+        "#984ea3",  # purple
+        "#ff7f00",  # orange
+        "#ffff33",  # yellow
+        "#a65628",  # brown
+        "#f781bf",  # pink
+    ]
+
+    if n_bins > len(categorical_palette):
+        raise ValueError("Increase categorical palette size.")
+
+    # ------------------------------------------------------------
+    # 4️⃣ Edge Trace
+    # ------------------------------------------------------------
+    edge_x, edge_y = [], []
+    for u, v in tqdm(G.edges(), desc="Adding edges"):
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+
+    edge_trace = go.Scatter(
+        x=edge_x,
+        y=edge_y,
+        mode="lines",
+        line=dict(width=0.4, color="#bbbbbb"),
+        hoverinfo="none",
+        showlegend=False,
+    )
+
+    # ------------------------------------------------------------
+    # 5️⃣ Node Traces Per Bin
+    # ------------------------------------------------------------
+    node_traces = []
+
+    # Valid bins
+    for bin_idx in range(n_bins):
+        bin_nodes = [
+            nodes[i]
+            for i in range(len(nodes))
+            if binned[i] == bin_idx
+        ]
+
+        if not bin_nodes:
+            continue
+
+        x_vals = [pos[n][0] for n in bin_nodes]
+        y_vals = [pos[n][1] for n in bin_nodes]
+
+        hover_text = [
+            f"<b>{G.nodes[n].get('title', n)}</b><br>"
+            f"Constraint: {constraint_dict[n]:.4f}"
+            for n in bin_nodes
+        ]
+
+        lower = bins[bin_idx]
+        upper = bins[bin_idx + 1]
+        label = f"{lower:.3f} – {upper:.3f}"
+
+        node_traces.append(
+            go.Scatter(
+                x=x_vals,
+                y=y_vals,
+                mode="markers",
+                text=hover_text,
+                hoverinfo="text",
+                marker=dict(
+                    size=9,
+                    color=categorical_palette[bin_idx],
+                    line=dict(width=1, color="black"),
+                ),
+                name=label,
+                showlegend=True,
+            )
+        )
+
+    # ------------------------------------------------------------
+    # 6️⃣ Undefined Constraint Nodes (NaN)
+    # ------------------------------------------------------------
+    nan_nodes = [
+        nodes[i] for i in range(len(nodes)) if binned[i] == -1
+    ]
+
+    if nan_nodes:
+        x_vals = [pos[n][0] for n in nan_nodes]
+        y_vals = [pos[n][1] for n in nan_nodes]
+
+        node_traces.append(
+            go.Scatter(
+                x=x_vals,
+                y=y_vals,
+                mode="markers",
+                hoverinfo="text",
+                text=[
+                    f"<b>{G.nodes[n].get('title', n)}</b><br>"
+                    f"Constraint: Undefined (degree < 2)"
+                    for n in nan_nodes
+                ],
+                marker=dict(
+                    size=9,
+                    color="#999999",
+                    line=dict(width=1, color="black"),
+                ),
+                name="Undefined (deg < 2)",
+                showlegend=True,
+            )
+        )
+
+    # ------------------------------------------------------------
+    # 7️⃣ Figure
+    # ------------------------------------------------------------
+    fig = go.Figure(
+        data=[edge_trace] + node_traces,
+        layout=go.Layout(
+            title="Graph Colored by Structural Constraint (Quantile Bins)",
+            hovermode="closest",
+            margin=dict(b=20, l=5, r=5, t=40),
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            width=1800,
+            height=1200,
+            legend=dict(title="Constraint Range", x=1.02, y=1),
+        ),
+    )
+
+    fig.write_html(output_path)
+    fig.write_image(output_path.with_suffix(".png"), width=1200, height=800, scale=5)
+
+    logger.success(f"Saved graph to {output_path}")

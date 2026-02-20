@@ -11,6 +11,7 @@ from artificial_intelligence_in_medicine._plots_helpers import (
     plot_cartographic_density,
     plot_normalized_articles_over_time,
 )
+from artificial_intelligence_in_medicine.config import FIGURES_DIR, GRAPHS_DIR
 from artificial_intelligence_in_medicine.modeling._graphs_helpers import (
     assign_community_labels,
     assign_countries_from_latlon,
@@ -28,7 +29,7 @@ from artificial_intelligence_in_medicine.modeling._graphs_helpers import (
 
 app = typer.Typer()
 
-MODES = ["NULL"]
+MODES = ["ARTIFICIAL_INTELLIGENCE"]
 
 
 def main():
@@ -37,14 +38,25 @@ def main():
     for MODE in MODES:
         # 1. Initialize base graph (contains year, metadata, etc.)
         G: nx.DiGraph[str] = initialize_graph(MODE)
+        logger.info(f"Length of nodes: {len(G.nodes())}")
+
+# Find nodes with degree < 2
+        nodes_to_remove = [n for n, d in G.degree() if d < 2]
+
+# Remove in place
+        G.remove_nodes_from(nodes_to_remove)
+
+        logger.info(f"Length after removing low-degree nodes: {len(G.nodes())}")
+
+        visualize_graph(G, output_path=FIGURES_DIR / MODE / "full_graph.png")
         G = generate_embeddings(
             G,
             text_attr="title",
         )
         if MODE == "GENE_EXPRESSION":
-            plot_semantic_graph(G, MODE, "embedding", min_degree=10)
+            plot_semantic_graph(G, MODE, "embedding", min_degree=1)
         else:
-            plot_semantic_graph(G, MODE, "embedding")
+            plot_semantic_graph(G, MODE, "embedding", top_k=4, min_degree=1)
         all_keys = set()
 
         for _, attrs in G.nodes(data=True):
@@ -92,6 +104,7 @@ def main():
             G=g,
             MODE=MODE,
         )
+        nx.write_graphml_xml(g, GRAPHS_DIR / MODE / "graph.gml")
 
 
 if __name__ == "__main__":
