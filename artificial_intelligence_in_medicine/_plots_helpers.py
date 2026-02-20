@@ -19,8 +19,6 @@ from artificial_intelligence_in_medicine.config import (
     PROCESSED_DATA_DIR,
     RAW_DATA_DIR,
 )
-from datetime import datetime
-from plotly.colors import sample_colorscale
 
 
 def plot_communities(G: nx.Graph, MODE: str):
@@ -1855,14 +1853,15 @@ def visualize_communities(
     node_scale: float = 1.0,
     edge_scale: float = 1.0,
     title: str = None,
-    width: int = 1100,
-    height: int = 750,
-) -> tuple[go.Figure, dict]:
+    figsize: tuple = (14, 10),
+    output_path: str = "communities.png",
+    dpi: int = 150,
+) -> dict:
     """
     Detect communities in a NetworkX graph using Louvain, then build and
-    visualize a weighted "community graph" where each node is a community
-    and each edge weight equals the total weight of inter-community edges
-    in the original graph.
+    save a weighted "community graph" where each node is a community and
+    each edge weight equals the total weight of inter-community edges in
+    the original graph.
 
     Parameters
     ----------
@@ -1884,14 +1883,15 @@ def visualize_communities(
         Multiplier for edge widths.
     title : str or None
         Plot title. Auto-generated if None.
-    width : int
-        Figure width in pixels.
-    height : int
-        Figure height in pixels.
+    figsize : tuple
+        Figure size in inches.
+    output_path : str
+        File path to save the figure (e.g. "out.png", "out.pdf").
+    dpi : int
+        Resolution of the saved figure.
 
     Returns
     -------
-    fig : go.Figure
     info : dict
         Keys: ``communities`` (node→community id mapping),
               ``community_graph`` (the nx.Graph of communities),
@@ -1954,22 +1954,17 @@ def visualize_communities(
             intra_stats[comm] = subg.number_of_edges() / possible
 
     # ------------------------------------------------------------------ #
-    # 4. Layout                                                            #
+    # 4. Layout & draw                                                     #
     # ------------------------------------------------------------------ #
+    fig, ax = plt.subplots(figsize=figsize, facecolor="#0d1117")
+    ax.set_facecolor("#0d1117")
+
     pos = nx.spring_layout(CG, weight="weight", seed=random_state, k=2.5)
 
-    # Sample one colour per community from Plasma
-    palette = sample_colorscale(
-        "Plasma", [i / max(n_communities - 1, 1) for i in range(n_communities)]
-    )
-    node_colors = {c: palette[i] for i, c in enumerate(community_ids)}
+    cmap = cm.get_cmap("plasma", n_communities)
+    node_colors = {c: cmap(i) for i, c in enumerate(community_ids)}
 
-    # ------------------------------------------------------------------ #
-    # 5. Build Plotly traces                                               #
-    # ------------------------------------------------------------------ #
-    traces: list[go.BaseTraceType] = []
-
-    # --- Edge traces (one per edge so we can vary width/opacity) ---
+    # --- Edges ---
     edge_weights = nx.get_edge_attributes(CG, "weight")
     if edge_weights:
         max_ew = max(edge_weights.values())
@@ -1985,131 +1980,24 @@ def visualize_communities(
         alpha = 0.15 + norm_w * 0.65
         x0, y0 = pos[u]
         x1, y1 = pos[v]
+        ax.plot([x0, x1], [y0, y1], color="#c0c0c0", linewidth=lw, alpha=alpha, zorder=1)
 
-        hover_label = f"{w:.3f}" if mode == "semantic" else f"{int(w)} citations"
-        traces.append(
-            go.Scatter(
-                x=[x0, x1, None],
-                y=[y0, y1, None],
-                mode="lines",
-                line=dict(width=lw, color=f"rgba(192,192,192,{alpha:.2f})"),
-                hoverinfo="text",
-                hovertext=f"C{u} ↔ C{v}<br>weight: {hover_label}",
-                showlegend=False,
+        if norm_w > 0.6:
+            mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+            label = f"{w:.2f}" if mode == "semantic" else f"{int(w)}"
+            ax.text(
+                mx,
+                my,
+                label,
+                fontsize=7,
+                color="white",
+                ha="center",
+                va="center",
+                zorder=5,
+                bbox=dict(boxstyle="round,pad=0.15", fc="#0d1117", alpha=0.6, ec="none"),
             )
-        )
 
-    # --- Node trace ---
-    node_x, node_y, node_sizes, node_colors_list = [], [], [], []
-    node_hover, node_text = [], []
-
+    # --- Nodes ---
     for comm in community_ids:
         x, y = pos[comm]
-        node_x.append(x)
-        node_y.append(y)
-
-        size = (20 + (comm_sizes[comm] / max_size) * 60) * node_scale
-        node_sizes.append(size)
-        node_colors_list.append(node_colors[comm])
-
-        stat = intra_stats[comm]
-        stat_label = (
-            f"Avg cosine sim: {stat:.3f}" if mode == "semantic" else f"Intra density: {stat:.3f}"
-        )
-        inter_w = (
-            sum(d["weight"] for _, _, d in CG.edges(comm, data=True))
-            if CG.degree(comm) > 0
-            else 0.0
-        )
-        inter_label = (
-            f"Σ inter-community sim: {inter_w:.3f}"
-            if mode == "semantic"
-            else f"Σ inter-community citations: {int(inter_w)}"
-        )
-
-        node_hover.append(
-            f"<b>Community {comm}</b><br>"
-            f"Members: {comm_sizes[comm]}<br>"
-            f"{stat_label}<br>"
-            f"{inter_label}"
-        )
-        node_text.append(f"C{comm}<br>n={comm_sizes[comm]}")
-
-    traces.append(
-        go.Scatter(
-            x=node_x,
-            y=node_y,
-            mode="markers+text",
-            marker=dict(
-                size=node_sizes,
-                color=node_colors_list,
-                line=dict(width=1.5, color="white"),
-                opacity=0.92,
-            ),
-            text=node_text,
-            textposition="middle center",
-            textfont=dict(color="white", size=11, family="monospace"),
-            hoverinfo="text",
-            hovertext=node_hover,
-            showlegend=False,
-        )
-    )
-
-    # --- Legend as invisible scatter points ---
-    for comm in community_ids:
-        stat = intra_stats[comm]
-        stat_str = f"avg sim {stat:.2f}" if mode == "semantic" else f"density {stat:.2f}"
-        traces.append(
-            go.Scatter(
-                x=[None],
-                y=[None],
-                mode="markers",
-                marker=dict(size=12, color=node_colors[comm]),
-                name=f"C{comm}: {comm_sizes[comm]} nodes | {stat_str}",
-                showlegend=True,
-            )
-        )
-
-    # ------------------------------------------------------------------ #
-    # 6. Assemble figure                                                   #
-    # ------------------------------------------------------------------ #
-    if title is None:
-        mode_label = "Semantic Similarity" if mode == "semantic" else "Citation"
-        title = (
-            f"{mode_label} Community Graph  |  {n_communities} communities  |  Q={modularity:.4f}"
-        )
-
-    edge_weight_label = (
-        "Edge weight = Σ cosine similarity" if mode == "semantic" else "Edge weight = Σ citations"
-    )
-
-    fig = go.Figure(
-        data=traces,
-        layout=go.Layout(
-            title=dict(text=title, font=dict(color="white", size=15), x=0.5),
-            paper_bgcolor="#0d1117",
-            plot_bgcolor="#0d1117",
-            width=width,
-            height=height,
-            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            legend=dict(
-                title=dict(text=edge_weight_label, font=dict(color="#aaa", size=10)),
-                bgcolor="#1c2128",
-                bordercolor="#444",
-                borderwidth=1,
-                font=dict(color="white", size=10),
-            ),
-            hovermode="closest",
-            margin=dict(l=20, r=20, t=60, b=20),
-        ),
-    )
-
-    info = {
-        "communities": node_community,
-        "community_graph": CG,
-        "partition": partition,
-        "modularity": modularity,
-        "intra_stats": intra_stats,
-    }
-    return fig, info
+        size = 400

@@ -42,6 +42,9 @@ def main():
         G: nx.DiGraph[str] = initialize_graph(MODE)
         logger.info(f"Length of nodes: {len(G.nodes())}")
 
+        visualize_communities(
+            G, mode="citation", output_path=FIGURES_DIR / MODE / "agglomerated_citation.png"
+        )
         # Find nodes with degree < 2
         nodes_to_remove = [n for n, d in G.degree() if d < 2]
 
@@ -49,17 +52,59 @@ def main():
         G.remove_nodes_from(nodes_to_remove)
 
         logger.info(f"Length after removing low-degree nodes: {len(G.nodes())}")
-        fig, _ = visualize_communities(G, mode="citation")
-        with open(FIGURES_DIR / MODE / "aggregated_communities_citation.png", "wb") as f:
-            pickle.dump(fig, f)
         G_sem = generate_embeddings(
             G,
             text_attr="title",
         )
-        fig, _ = visualize_communities(G_sem, mode="semantic")
-        with open(FIGURES_DIR / MODE / "aggregated_communities_semantic.png", "wb") as f:
-            pickle.dump(fig, f)
+        visualize_communities(
+            G_sem, mode="semantic", output_path=FIGURES_DIR / MODE / "agglomerated_semantic.png"
+        )
         all_keys = set()
+
+        for _, attrs in G.nodes(data=True):
+            all_keys.update(attrs.keys())
+
+        # plot_cartographic_density(MODE)
+        # 3. Community detection
+        # IMPORTANT: treat the returned graph as the canonical graph going forward
+        g: nx.Graph = community_detection(
+            mode=MODE,
+            G=G,
+            inflection_point=1,
+        )
+        plot_normalized_articles_over_time(MODE)
+        # _ = assign_countries_from_latlon(g)
+        try:
+            _ = plot_communities(g, MODE)
+        except Exception as e:
+            logger.critical(f"You are bad at coding. \n{e}")
+        # 4. Sanity check: communities exist
+        communities = nx.get_node_attributes(g, "community")
+
+        # 5. Compute constraints ON THE SAME GRAPH that has year attributes
+        constraints = nx.constraint(g)
+
+        plot_constraints_by_community(g, constraints, MODE)
+        plot_constraints_by_country(g, constraints, MODE)
+        # 6. Plot constraints using THE SAME GRAPH
+        plot_constraint(g, MODE, constraints)
+        plot_constraints_over_time(g, constraints, MODE)
+        plot_normalized_constraints_over_time(g, constraints, MODE)
+
+        logger.info("Now plotting communities")
+
+        # 7. Label communities (mutates g)
+        g = assign_community_labels(MODE, g)
+
+        # 8. All downstream plots use g
+        plot_communities(g, MODE=MODE)
+        plot_horizontal_timeline(g, MODE)
+        plot_communities_vertical_barchart(
+            G=g,
+            MODE=MODE,
+        )
+        nx.write_graphml_xml(g, GRAPHS_DIR / MODE / "graph.gml")
+
 
 if __name__ == "__main__":
     main()
