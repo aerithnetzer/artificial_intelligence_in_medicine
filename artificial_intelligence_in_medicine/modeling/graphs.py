@@ -50,13 +50,13 @@ def main():
 
         logger.info(f"Length after removing low-degree nodes: {len(G.nodes())}")
         fig, _ = visualize_communities(G, mode="citation")
-        fig.write_html(FIGURES_DIR / MODE / "aggregated_communities_citation.html")
+        fig.write_image(FIGURES_DIR / MODE / "aggregated_communities_citation.png")
         G_sem = generate_embeddings(
             G,
             text_attr="title",
         )
         fig, _ = visualize_communities(G_sem, mode="semantic")
-        fig.write_html(FIGURES_DIR / MODE / "aggregated_communities_semantic.html")
+        fig.write_png(FIGURES_DIR / MODE / "aggregated_communities_semantic.png")
         plot_semantic_graph(G, MODE, "embedding", top_k=4, min_degree=1)
         all_keys = set()
 
