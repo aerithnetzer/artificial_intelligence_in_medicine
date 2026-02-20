@@ -19,6 +19,8 @@ from artificial_intelligence_in_medicine.config import (
     PROCESSED_DATA_DIR,
     RAW_DATA_DIR,
 )
+import matplotlib.cm as cm
+import matplotlib.pyplot as plt
 
 
 def plot_communities(G: nx.Graph, MODE: str):
