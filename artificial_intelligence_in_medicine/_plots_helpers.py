@@ -20,6 +20,7 @@ from artificial_intelligence_in_medicine.config import (
     RAW_DATA_DIR,
 )
 from datetime import datetime
+from plotly.colors import sample_colorscale
 
 
 def plot_communities(G: nx.Graph, MODE: str):
@@ -54,8 +55,12 @@ def plot_communities(G: nx.Graph, MODE: str):
 
     # --- Assign community labels to nodes ---
     nx.set_node_attributes(
-        G, {n: community_names.get(communities.get(n), f"Community {communities.get(n)}") for n in G.nodes()},
-        "community_label"
+        G,
+        {
+            n: community_names.get(communities.get(n), f"Community {communities.get(n)}")
+            for n in G.nodes()
+        },
+        "community_label",
     )
 
     print("Graph and labels saved. Visualizing...")
@@ -1590,9 +1595,7 @@ def plot_semantic_graph(
                 sg.add_edge(nodes[i], nodes[j], weight=sim)
 
     # --- drop isolates ---
-    sg.remove_nodes_from(
-        [n for n in sg.nodes() if sg.in_degree(n) == 0 and sg.out_degree(n) == 0]
-    )
+    sg.remove_nodes_from([n for n in sg.nodes() if sg.in_degree(n) == 0 and sg.out_degree(n) == 0])
 
     if sg.number_of_nodes() == 0:
         raise ValueError("No nodes left after filtering isolates.")
@@ -1636,7 +1639,7 @@ def plot_semantic_graph(
     c_vals = np.array([constraints[n] for n in sg.nodes()])
     c_min, c_max = c_vals.min(), c_vals.max()
 
-# normalize to [0, 1]
+    # normalize to [0, 1]
     c_norm = (c_vals - c_min) / (c_max - c_min + 1e-8)
     node_x = []
     node_y = []
@@ -1681,6 +1684,7 @@ def plot_semantic_graph(
     fig.write_html(FIGURES_DIR / MODE / "semanticgraph.html")
     return fig, sg
 
+
 def visualize_graph(G, output_path, n_bins: int = 5):
     logger.info("Computing layout")
     pos = nx.forceatlas2_layout(G, backend="cugraph", max_iter=20)
@@ -1712,9 +1716,7 @@ def visualize_graph(G, output_path, n_bins: int = 5):
 
     # Assign bins (default -1 for NaNs)
     binned = np.full(len(nodes), -1)
-    binned[valid_mask] = np.digitize(
-        valid_values, bins[1:-1]
-    )
+    binned[valid_mask] = np.digitize(valid_values, bins[1:-1])
 
     # ------------------------------------------------------------
     # 3️⃣ Strong Categorical Colors
@@ -1759,11 +1761,7 @@ def visualize_graph(G, output_path, n_bins: int = 5):
 
     # Valid bins
     for bin_idx in range(n_bins):
-        bin_nodes = [
-            nodes[i]
-            for i in range(len(nodes))
-            if binned[i] == bin_idx
-        ]
+        bin_nodes = [nodes[i] for i in range(len(nodes)) if binned[i] == bin_idx]
 
         if not bin_nodes:
             continue
@@ -1772,8 +1770,7 @@ def visualize_graph(G, output_path, n_bins: int = 5):
         y_vals = [pos[n][1] for n in bin_nodes]
 
         hover_text = [
-            f"<b>{G.nodes[n].get('title', n)}</b><br>"
-            f"Constraint: {constraint_dict[n]:.4f}"
+            f"<b>{G.nodes[n].get('title', n)}</b><br>Constraint: {constraint_dict[n]:.4f}"
             for n in bin_nodes
         ]
 
@@ -1801,9 +1798,7 @@ def visualize_graph(G, output_path, n_bins: int = 5):
     # ------------------------------------------------------------
     # 6️⃣ Undefined Constraint Nodes (NaN)
     # ------------------------------------------------------------
-    nan_nodes = [
-        nodes[i] for i in range(len(nodes)) if binned[i] == -1
-    ]
+    nan_nodes = [nodes[i] for i in range(len(nodes)) if binned[i] == -1]
 
     if nan_nodes:
         x_vals = [pos[n][0] for n in nan_nodes]
@@ -1816,8 +1811,7 @@ def visualize_graph(G, output_path, n_bins: int = 5):
                 mode="markers",
                 hoverinfo="text",
                 text=[
-                    f"<b>{G.nodes[n].get('title', n)}</b><br>"
-                    f"Constraint: Undefined (degree < 2)"
+                    f"<b>{G.nodes[n].get('title', n)}</b><br>Constraint: Undefined (degree < 2)"
                     for n in nan_nodes
                 ],
                 marker=dict(
@@ -1851,3 +1845,271 @@ def visualize_graph(G, output_path, n_bins: int = 5):
     fig.write_image(output_path.with_suffix(".png"), width=1200, height=800, scale=5)
 
     logger.success(f"Saved graph to {output_path}")
+
+
+def visualize_communities(
+    G: nx.Graph,
+    mode: str = "semantic",
+    resolution: float = 1.0,
+    random_state: int = 42,
+    node_scale: float = 1.0,
+    edge_scale: float = 1.0,
+    title: str = None,
+    width: int = 1100,
+    height: int = 750,
+) -> tuple[go.Figure, dict]:
+    """
+    Detect communities in a NetworkX graph using Louvain, then build and
+    visualize a weighted "community graph" where each node is a community
+    and each edge weight equals the total weight of inter-community edges
+    in the original graph.
+
+    Parameters
+    ----------
+    G : nx.Graph
+        Input graph.
+        - semantic mode : edges carry a ``weight`` attribute representing
+          cosine similarity between articles (0–1).
+        - citation  mode: edges represent citations; an optional ``weight``
+          attribute is used if present, otherwise every edge is weight 1.
+    mode : {"semantic", "citation"}
+        Determines how edge weights and visual encodings are interpreted.
+    resolution : float
+        Louvain resolution parameter (higher → more, smaller communities).
+    random_state : int
+        Seed for reproducibility.
+    node_scale : float
+        Multiplier for node sizes.
+    edge_scale : float
+        Multiplier for edge widths.
+    title : str or None
+        Plot title. Auto-generated if None.
+    width : int
+        Figure width in pixels.
+    height : int
+        Figure height in pixels.
+
+    Returns
+    -------
+    fig : go.Figure
+    info : dict
+        Keys: ``communities`` (node→community id mapping),
+              ``community_graph`` (the nx.Graph of communities),
+              ``partition`` (dict community→list of nodes),
+              ``modularity`` (float),
+              ``intra_stats`` (dict community→cohesion stat).
+    """
+    if mode not in ("semantic", "citation"):
+        raise ValueError(f"mode must be 'semantic' or 'citation', got {mode!r}")
+
+    # ------------------------------------------------------------------ #
+    # 1. Detect communities with NetworkX Louvain                         #
+    # ------------------------------------------------------------------ #
+    communities = nx.community.louvain_communities(
+        G, weight="weight", resolution=resolution, seed=random_state
+    )
+
+    node_community: dict = {}
+    partition: dict[int, list] = {}
+    for comm_id, members in enumerate(communities):
+        partition[comm_id] = list(members)
+        for node in members:
+            node_community[node] = comm_id
+
+    community_ids = sorted(partition.keys())
+    n_communities = len(community_ids)
+    modularity = nx.community.modularity(G, communities, weight="weight")
+
+    # ------------------------------------------------------------------ #
+    # 2. Build the community graph                                         #
+    # ------------------------------------------------------------------ #
+    CG = nx.Graph()
+    CG.add_nodes_from(community_ids)
+
+    for u, v, data in G.edges(data=True):
+        cu, cv = node_community[u], node_community[v]
+        if cu == cv:
+            continue
+        w = data.get("weight", 1.0)
+        if CG.has_edge(cu, cv):
+            CG[cu][cv]["weight"] += w
+        else:
+            CG.add_edge(cu, cv, weight=w)
+
+    # ------------------------------------------------------------------ #
+    # 3. Per-community stats                                               #
+    # ------------------------------------------------------------------ #
+    comm_sizes = {c: len(members) for c, members in partition.items()}
+    max_size = max(comm_sizes.values()) if comm_sizes else 1
+
+    intra_stats: dict[int, float] = {}
+    for comm, members in partition.items():
+        subg = G.subgraph(members)
+        n = len(members)
+        if mode == "semantic":
+            weights = [d.get("weight", 0.0) for _, _, d in subg.edges(data=True)]
+            intra_stats[comm] = float(np.mean(weights)) if weights else 0.0
+        else:
+            possible = n * (n - 1) / 2 if n > 1 else 1
+            intra_stats[comm] = subg.number_of_edges() / possible
+
+    # ------------------------------------------------------------------ #
+    # 4. Layout                                                            #
+    # ------------------------------------------------------------------ #
+    pos = nx.spring_layout(CG, weight="weight", seed=random_state, k=2.5)
+
+    # Sample one colour per community from Plasma
+    palette = sample_colorscale(
+        "Plasma", [i / max(n_communities - 1, 1) for i in range(n_communities)]
+    )
+    node_colors = {c: palette[i] for i, c in enumerate(community_ids)}
+
+    # ------------------------------------------------------------------ #
+    # 5. Build Plotly traces                                               #
+    # ------------------------------------------------------------------ #
+    traces: list[go.BaseTraceType] = []
+
+    # --- Edge traces (one per edge so we can vary width/opacity) ---
+    edge_weights = nx.get_edge_attributes(CG, "weight")
+    if edge_weights:
+        max_ew = max(edge_weights.values())
+        min_ew = min(edge_weights.values())
+        ew_range = max_ew - min_ew if max_ew != min_ew else 1.0
+    else:
+        max_ew = min_ew = 1.0
+        ew_range = 1.0
+
+    for (u, v), w in edge_weights.items():
+        norm_w = (w - min_ew) / ew_range
+        lw = (0.5 + norm_w * 6.0) * edge_scale
+        alpha = 0.15 + norm_w * 0.65
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+
+        hover_label = f"{w:.3f}" if mode == "semantic" else f"{int(w)} citations"
+        traces.append(
+            go.Scatter(
+                x=[x0, x1, None],
+                y=[y0, y1, None],
+                mode="lines",
+                line=dict(width=lw, color=f"rgba(192,192,192,{alpha:.2f})"),
+                hoverinfo="text",
+                hovertext=f"C{u} ↔ C{v}<br>weight: {hover_label}",
+                showlegend=False,
+            )
+        )
+
+    # --- Node trace ---
+    node_x, node_y, node_sizes, node_colors_list = [], [], [], []
+    node_hover, node_text = [], []
+
+    for comm in community_ids:
+        x, y = pos[comm]
+        node_x.append(x)
+        node_y.append(y)
+
+        size = (20 + (comm_sizes[comm] / max_size) * 60) * node_scale
+        node_sizes.append(size)
+        node_colors_list.append(node_colors[comm])
+
+        stat = intra_stats[comm]
+        stat_label = (
+            f"Avg cosine sim: {stat:.3f}" if mode == "semantic" else f"Intra density: {stat:.3f}"
+        )
+        inter_w = (
+            sum(d["weight"] for _, _, d in CG.edges(comm, data=True))
+            if CG.degree(comm) > 0
+            else 0.0
+        )
+        inter_label = (
+            f"Σ inter-community sim: {inter_w:.3f}"
+            if mode == "semantic"
+            else f"Σ inter-community citations: {int(inter_w)}"
+        )
+
+        node_hover.append(
+            f"<b>Community {comm}</b><br>"
+            f"Members: {comm_sizes[comm]}<br>"
+            f"{stat_label}<br>"
+            f"{inter_label}"
+        )
+        node_text.append(f"C{comm}<br>n={comm_sizes[comm]}")
+
+    traces.append(
+        go.Scatter(
+            x=node_x,
+            y=node_y,
+            mode="markers+text",
+            marker=dict(
+                size=node_sizes,
+                color=node_colors_list,
+                line=dict(width=1.5, color="white"),
+                opacity=0.92,
+            ),
+            text=node_text,
+            textposition="middle center",
+            textfont=dict(color="white", size=11, family="monospace"),
+            hoverinfo="text",
+            hovertext=node_hover,
+            showlegend=False,
+        )
+    )
+
+    # --- Legend as invisible scatter points ---
+    for comm in community_ids:
+        stat = intra_stats[comm]
+        stat_str = f"avg sim {stat:.2f}" if mode == "semantic" else f"density {stat:.2f}"
+        traces.append(
+            go.Scatter(
+                x=[None],
+                y=[None],
+                mode="markers",
+                marker=dict(size=12, color=node_colors[comm]),
+                name=f"C{comm}: {comm_sizes[comm]} nodes | {stat_str}",
+                showlegend=True,
+            )
+        )
+
+    # ------------------------------------------------------------------ #
+    # 6. Assemble figure                                                   #
+    # ------------------------------------------------------------------ #
+    if title is None:
+        mode_label = "Semantic Similarity" if mode == "semantic" else "Citation"
+        title = (
+            f"{mode_label} Community Graph  |  {n_communities} communities  |  Q={modularity:.4f}"
+        )
+
+    edge_weight_label = (
+        "Edge weight = Σ cosine similarity" if mode == "semantic" else "Edge weight = Σ citations"
+    )
+
+    fig = go.Figure(
+        data=traces,
+        layout=go.Layout(
+            title=dict(text=title, font=dict(color="white", size=15), x=0.5),
+            paper_bgcolor="#0d1117",
+            plot_bgcolor="#0d1117",
+            width=width,
+            height=height,
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            legend=dict(
+                title=dict(text=edge_weight_label, font=dict(color="#aaa", size=10)),
+                bgcolor="#1c2128",
+                bordercolor="#444",
+                borderwidth=1,
+                font=dict(color="white", size=10),
+            ),
+            hovermode="closest",
+            margin=dict(l=20, r=20, t=60, b=20),
+        ),
+    )
+
+    info = {
+        "communities": node_community,
+        "community_graph": CG,
+        "partition": partition,
+        "modularity": modularity,
+        "intra_stats": intra_stats,
+    }
+    return fig, info

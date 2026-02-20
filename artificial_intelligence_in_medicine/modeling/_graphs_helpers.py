@@ -25,6 +25,10 @@ def load_graph(graph_path):
     return graph
 
 
+def citation_community_graph(G: nx.Graph):
+    nx.community.louvain_communities(G, seed=42)
+
+
 def plot_normalized_constraints_over_time(G, constraints, MODE):
     """
     Plot normalized constraint distributions over time.
@@ -312,11 +316,10 @@ def initialize_graph(mode: str):
 
     return G
 
+
 def graph_visualization(G: nx.Graph):
-    
-
-
     return None
+
 
 def find_central_nodes(mode: str = "ARTIFICIAL_INTELLIGENCE"):
     graph: Path | nx.Graph = MODELS_DIR / mode / "citation_model.pkl"

@@ -10,7 +10,8 @@ from artificial_intelligence_in_medicine._plots_helpers import (
     plot_constraint,
     plot_cartographic_density,
     plot_normalized_articles_over_time,
-    visualize_graph
+    visualize_graph,
+    visualize_communities,
 )
 from artificial_intelligence_in_medicine.config import FIGURES_DIR, GRAPHS_DIR
 from artificial_intelligence_in_medicine.modeling._graphs_helpers import (
@@ -41,23 +42,21 @@ def main():
         G: nx.DiGraph[str] = initialize_graph(MODE)
         logger.info(f"Length of nodes: {len(G.nodes())}")
 
-# Find nodes with degree < 2
+        # Find nodes with degree < 2
         nodes_to_remove = [n for n, d in G.degree() if d < 2]
 
-# Remove in place
+        # Remove in place
         G.remove_nodes_from(nodes_to_remove)
 
         logger.info(f"Length after removing low-degree nodes: {len(G.nodes())}")
-
-        visualize_graph(G, output_path=FIGURES_DIR / MODE / "full_graph.png")
-        G = generate_embeddings(
+        fig, _ = visualize_communities(G, mode="citation")
+        fig.write_html(FIGURES_DIR / MODE / "aggregated_communities_citation.html")
+        G_sem = generate_embeddings(
             G,
             text_attr="title",
         )
-        if MODE == "GENE_EXPRESSION":
-            plot_semantic_graph(G, MODE, "embedding", min_degree=1)
-        else:
-            plot_semantic_graph(G, MODE, "embedding", top_k=4, min_degree=1)
+        fig, _ = visualize_communities(G_sem, mode="semantic")
+        plot_semantic_graph(G, MODE, "embedding", top_k=4, min_degree=1)
         all_keys = set()
 
         for _, attrs in G.nodes(data=True):
@@ -66,7 +65,7 @@ def main():
         # 2. Compute inflection point on the same graph
         inflection_point = calculate_inflection_point(G, MODE=MODE)
 
-        plot_cartographic_density(MODE)
+        # plot_cartographic_density(MODE)
         # 3. Community detection
         # IMPORTANT: treat the returned graph as the canonical graph going forward
         g: nx.Graph = community_detection(
@@ -75,7 +74,7 @@ def main():
             inflection_point=inflection_point,
         )
         plot_normalized_articles_over_time(MODE)
-        _ = assign_countries_from_latlon(g)
+        # _ = assign_countries_from_latlon(g)
         try:
             _ = plot_communities(g, MODE)
         except Exception as e:
