@@ -29,7 +29,7 @@ from artificial_intelligence_in_medicine.modeling._graphs_helpers import (
 
 app = typer.Typer()
 
-MODES = ["ARTIFICIAL_INTELLIGENCE"]
+MODES = ["NULL", "ARTIFICIAL_INTELLIGENCE", "GENE_EXPRESSION"]
 
 
 def main():

@@ -1683,7 +1683,7 @@ def plot_semantic_graph(
 
 def visualize_graph(G, output_path, n_bins: int = 5):
     logger.info("Computing layout")
-    pos = nx.spring_layout(G, seed=42, iterations=10)
+    pos = nx.forceatlas2_layout(G, backend="cugraph", max_iter=20)
 
     # ------------------------------------------------------------
     # 1️⃣ Structural Constraint
