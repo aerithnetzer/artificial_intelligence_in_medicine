@@ -4,7 +4,6 @@
 *.csv
 *.md
 *.pkl
-*.png
 *.xml
 *.csv
 # Mac OS-specific storage files

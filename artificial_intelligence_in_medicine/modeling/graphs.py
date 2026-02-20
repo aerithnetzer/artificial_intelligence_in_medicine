@@ -59,58 +59,7 @@ def main():
         fig, _ = visualize_communities(G_sem, mode="semantic")
         with open(FIGURES_DIR / MODE / "aggregated_communities_semantic.png", "wb") as f:
             pickle.dump(fig, f)
-        # plot_semantic_graph(G, MODE, "embedding", top_k=4, min_degree=1)
-        with open(FIGURES_DIR / MODE / "aggregated_communities_semantic.png", "wb") as f:
-            pickle.dump(fig, f)
         all_keys = set()
-
-        for _, attrs in G.nodes(data=True):
-            all_keys.update(attrs.keys())
-
-        # 2. Compute inflection point on the same graph
-        inflection_point = calculate_inflection_point(G, MODE=MODE)
-
-        # plot_cartographic_density(MODE)
-        # 3. Community detection
-        # IMPORTANT: treat the returned graph as the canonical graph going forward
-        g: nx.Graph = community_detection(
-            mode=MODE,
-            G=G,
-            inflection_point=inflection_point,
-        )
-        plot_normalized_articles_over_time(MODE)
-        # _ = assign_countries_from_latlon(g)
-        try:
-            _ = plot_communities(g, MODE)
-        except Exception as e:
-            logger.critical(f"You are bad at coding. \n{e}")
-        # 4. Sanity check: communities exist
-        communities = nx.get_node_attributes(g, "community")
-
-        # 5. Compute constraints ON THE SAME GRAPH that has year attributes
-        constraints = nx.constraint(g)
-
-        plot_constraints_by_community(g, constraints, MODE)
-        plot_constraints_by_country(g, constraints, MODE)
-        # 6. Plot constraints using THE SAME GRAPH
-        plot_constraint(g, MODE, constraints)
-        plot_constraints_over_time(g, constraints, MODE)
-        plot_normalized_constraints_over_time(g, constraints, MODE)
-
-        logger.info("Now plotting communities")
-
-        # 7. Label communities (mutates g)
-        g = assign_community_labels(MODE, g)
-
-        # 8. All downstream plots use g
-        plot_communities(g, MODE=MODE)
-        plot_horizontal_timeline(g, MODE)
-        plot_communities_vertical_barchart(
-            G=g,
-            MODE=MODE,
-        )
-        nx.write_graphml_xml(g, GRAPHS_DIR / MODE / "graph.gml")
-
 
 if __name__ == "__main__":
     main()
