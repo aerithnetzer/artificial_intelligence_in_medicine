@@ -255,7 +255,7 @@ def visualize_constraints(g):
 
 def initialize_graph(mode: str):
     MODE = mode
-    features_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json"
+    features_path: Path = INTERIM_DATA_DIR / MODE / "dataset_with_citation_data.json"
     model_path: Path = MODELS_DIR / MODE / "citation_model.pkl"
     # ---- REPLACE THIS WITH YOUR OWN CODE ----
     logger.info("Initializing graph for citation modeling.")
@@ -723,10 +723,7 @@ def generate_embeddings(
     embeddings = np.vstack(embeddings)  # (N, d)
 
     # --- attach to graph ---
-    emb_dict = {
-        node: emb
-        for node, emb in zip(nodes, embeddings)
-    }
+    emb_dict = {node: emb for node, emb in zip(nodes, embeddings)}
 
     nx.set_node_attributes(g, emb_dict, embedding_attr)
 
