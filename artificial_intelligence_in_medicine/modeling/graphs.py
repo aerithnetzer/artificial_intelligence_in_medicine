@@ -1,6 +1,6 @@
 from loguru import logger
 import typer
-
+import pickle
 import artificial_intelligence_in_medicine
 from artificial_intelligence_in_medicine._plots_helpers import (
     plot_communities,
@@ -50,14 +50,18 @@ def main():
 
         logger.info(f"Length after removing low-degree nodes: {len(G.nodes())}")
         fig, _ = visualize_communities(G, mode="citation")
-        fig.write_image(FIGURES_DIR / MODE / "aggregated_communities_citation.png")
+        with open(FIGURES_DIR / MODE / "aggregated_communities_citation.png", "wb") as f:
+            pickle.dump(fig, f)
         G_sem = generate_embeddings(
             G,
             text_attr="title",
         )
         fig, _ = visualize_communities(G_sem, mode="semantic")
-        fig.write_png(FIGURES_DIR / MODE / "aggregated_communities_semantic.png")
-        plot_semantic_graph(G, MODE, "embedding", top_k=4, min_degree=1)
+        with open(FIGURES_DIR / MODE / "aggregated_communities_semantic.png", "wb") as f:
+            pickle.dump(fig, f)
+        # plot_semantic_graph(G, MODE, "embedding", top_k=4, min_degree=1)
+        with open(FIGURES_DIR / MODE / "aggregated_communities_semantic.png", "wb") as f:
+            pickle.dump(fig, f)
         all_keys = set()
 
         for _, attrs in G.nodes(data=True):
