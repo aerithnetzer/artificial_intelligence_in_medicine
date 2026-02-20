@@ -1,4 +1,6 @@
 from pathlib import Path
+import matplotlib.cm as cm
+import matplotlib.pyplot as plt
 import pickle
 import networkx as nx
 import igraph as ig
@@ -1847,6 +1849,12 @@ def visualize_graph(G, output_path, n_bins: int = 5):
     logger.success(f"Saved graph to {output_path}")
 
 
+import networkx as nx
+import numpy as np
+import matplotlib.patches as mpatches
+from matplotlib.colors import to_rgba
+
+
 def visualize_communities(
     G: nx.Graph,
     mode: str = "semantic",
@@ -2002,4 +2010,79 @@ def visualize_communities(
     # --- Nodes ---
     for comm in community_ids:
         x, y = pos[comm]
-        size = 400
+        size = 400 + (comm_sizes[comm] / max_size) * 2200 * node_scale
+        color = node_colors[comm]
+        stat = intra_stats[comm]
+
+        glow_color = list(to_rgba(color))
+        glow_color[3] = 0.18
+        ax.scatter(x, y, s=size * 2.2, color=[glow_color], zorder=2)
+        ax.scatter(x, y, s=size, color=[color], edgecolors="white", linewidths=0.8, zorder=3)
+
+        label_lines = [f"C{comm}", f"n={comm_sizes[comm]}"]
+        label_lines.append(f"sim={stat:.2f}" if mode == "semantic" else f"dens={stat:.2f}")
+        ax.text(
+            x,
+            y,
+            "\n".join(label_lines),
+            fontsize=8,
+            color="white",
+            ha="center",
+            va="center",
+            fontweight="bold",
+            zorder=4,
+            multialignment="center",
+        )
+
+    # --- Title & legend ---
+    if title is None:
+        mode_label = "Semantic Similarity" if mode == "semantic" else "Citation"
+        title = (
+            f"{mode_label} Community Graph  |  {n_communities} communities  |  Q={modularity:.4f}"
+        )
+
+    ax.set_title(title, color="white", fontsize=13, pad=14, fontweight="bold")
+    ax.axis("off")
+
+    legend_patches = [
+        mpatches.Patch(
+            color=node_colors[c],
+            label=(
+                f"C{c}: {comm_sizes[c]} nodes | "
+                + (
+                    f"avg sim {intra_stats[c]:.2f}"
+                    if mode == "semantic"
+                    else f"density {intra_stats[c]:.2f}"
+                )
+            ),
+        )
+        for c in community_ids
+    ]
+    ax.legend(
+        handles=legend_patches,
+        loc="lower left",
+        fontsize=8,
+        framealpha=0.3,
+        facecolor="#1c2128",
+        edgecolor="#444",
+        labelcolor="white",
+        title=(
+            "Edge weight = Σ cosine sim" if mode == "semantic" else "Edge weight = Σ citations"
+        ),
+        title_fontsize=8,
+    )
+
+    # ------------------------------------------------------------------ #
+    # 5. Save and close                                                    #
+    # ------------------------------------------------------------------ #
+    plt.tight_layout()
+    fig.savefig(output_path, dpi=dpi, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close(fig)
+
+    return {
+        "communities": node_community,
+        "community_graph": CG,
+        "partition": partition,
+        "modularity": modularity,
+        "intra_stats": intra_stats,
+    }
