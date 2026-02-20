@@ -56,6 +56,7 @@ def main():
             text_attr="title",
         )
         fig, _ = visualize_communities(G_sem, mode="semantic")
+        fig.write_html(FIGURES_DIR / MODE / "aggregated_communities_semantic.html")
         plot_semantic_graph(G, MODE, "embedding", top_k=4, min_degree=1)
         all_keys = set()
 
