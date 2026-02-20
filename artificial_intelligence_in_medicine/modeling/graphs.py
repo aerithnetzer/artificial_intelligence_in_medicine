@@ -10,6 +10,7 @@ from artificial_intelligence_in_medicine._plots_helpers import (
     plot_constraint,
     plot_cartographic_density,
     plot_normalized_articles_over_time,
+    visualize_graph
 )
 from artificial_intelligence_in_medicine.config import FIGURES_DIR, GRAPHS_DIR
 from artificial_intelligence_in_medicine.modeling._graphs_helpers import (
