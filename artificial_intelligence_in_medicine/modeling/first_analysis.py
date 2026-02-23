@@ -13,7 +13,7 @@ MODES = ["ARTIFICIAL_INTELLIGENCE", "GENE_EXPRESSION", "NULL"]
 
 def compute_betweenness_bins(G):
     logger.info("Now calculating centrailty")
-    centrality_dict = nx.betweenness_centrality(G, normalized=True)
+    centrality_dict = nx.betweenness_centrality(G, normalized=True, backend="cugraph")
 
     logger.success("Centrality completed.")
     bins = np.arange(0.0, 1.01, 0.2)
@@ -78,7 +78,7 @@ def main():
         plt.savefig(figures_path / "original_graph.svg")
         plt.close()
 
-        communities = nx.community.louvain_communities(G)
+        communities = nx.community.louvain_communities(G, backend="cugraph")
 
         node_to_community = {}
         for i, community in enumerate(communities):
