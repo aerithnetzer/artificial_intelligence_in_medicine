@@ -12,12 +12,24 @@ import networkx as nx
 MODES = ["ARTIFICIAL_INTELLIGENCE", "GENE_EXPRESSION", "NULL"]
 
 
-def compute_betweenness_bins_cugraph(G_cu, nodes):
-    logger.info("Computing betweenness centrality on GPU...")
-    bc_df = cugraph.betweenness_centrality(G_cu, normalized=True, k=1_000)
-    logger.success("Betweenness centrality computed.")
+def compute_betweenness_bins_cugraph(G_cu, nodes, batch_size=500):
+    logger.info("Computing betweenness centrality on GPU (batched)...")
+    all_vertices = G_cu.nodes().to_pandas().tolist()
 
-    bc_dict = dict(zip(bc_df["vertex"].to_pandas(), bc_df["betweenness_centrality"].to_pandas()))
+    accumulated = {v: 0.0 for v in all_vertices}
+    num_batches = -(-len(all_vertices) // batch_size)
+
+    for i in range(0, len(all_vertices), batch_size):
+        batch = all_vertices[i : i + batch_size]
+        logger.info(f"Processing batch {i // batch_size + 1} / {num_batches}")
+        bc_df = cugraph.betweenness_centrality(G_cu, normalized=True, k=batch)
+        for vertex, score in zip(
+            bc_df["vertex"].to_pandas(), bc_df["betweenness_centrality"].to_pandas()
+        ):
+            accumulated[vertex] += score
+
+    bc_dict = {v: score / num_batches for v, score in accumulated.items()}
+    logger.success("Betweenness centrality computed.")
 
     bins = np.arange(0.0, 1.01, 0.2)
     bin_labels = ["0.0–0.2", "0.2–0.4", "0.4–0.6", "0.6–0.8", "0.8–1.0"]
