@@ -10,8 +10,7 @@ import numpy as np
 import matplotlib.patches as mpatches
 from collections import defaultdict
 import pandas as pd
-
-from artificial_intelligence_in_medicine.main import initialize_graph
+from _graphs_helpers import initialize_graph
 
 MODES = ["ARTIFICIAL_INTELLIGENCE", "GENE_EXPRESSION", "NULL"]
 
@@ -47,7 +46,7 @@ def compute_constraint_bins(G):
 
 def main():
     for MODE in MODES:
-        G = initialize_graph(INTERIM_DATA_DIR / MODE / "features_with_ror.json")
+        G: nx.DiGraph[str] = initialize_graph(mode=MODE)
         G.remove_nodes_from(list(nx.isolates(G)))
 
         figures_path = FIGURES_DIR / MODE
