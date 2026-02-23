@@ -35,7 +35,7 @@ def compute_betweenness_bins_cugraph(G_cu, nodes, batch_size=500):
     bin_labels = ["0.0–0.2", "0.2–0.4", "0.4–0.6", "0.6–0.8", "0.8–1.0"]
 
     node_bins = {}
-    for node in bc_dict.keys():  # <-- iterate bc_dict, not nodes
+    for node in bc_dict.keys():
         value = bc_dict.get(node, 0.0)
         bin_index = np.digitize(value, bins, right=True) - 1
         bin_index = max(0, min(bin_index, len(bin_labels) - 1))
@@ -43,13 +43,23 @@ def compute_betweenness_bins_cugraph(G_cu, nodes, batch_size=500):
 
     cmap = plt.get_cmap("Set2")
     colors = [cmap(i) for i in range(len(bin_labels))]
-    node_colors = [colors[node_bins[n]] for n in nodes]  # nodes still used here for ordering
+
+    # Only include nodes that exist in node_bins (i.e. were present in cuGraph)
+    cu_vertex_set = set(all_vertices)
+    valid_nodes = [n for n in nodes if n in cu_vertex_set]
+    if len(valid_nodes) < len(nodes):
+        logger.warning(
+            f"{len(nodes) - len(valid_nodes)} nodes from NetworkX were not found in cuGraph "
+            f"and will be skipped for coloring."
+        )
+
+    node_colors = [colors[node_bins.get(n, 0)] for n in valid_nodes]
 
     legend_patches = [
         mpatches.Patch(color=colors[i], label=bin_labels[i]) for i in range(len(bin_labels))
     ]
 
-    return bc_dict, node_bins, node_colors, legend_patches, bin_labels
+    return bc_dict, node_bins, node_colors, legend_patches, bin_labels, valid_nodes
 
 
 def compute_force_atlas2_positions(G_cu, iterations=2000):
@@ -82,8 +92,10 @@ def main():
         results_path = RESULTS_DATA_DIR / MODE
         results_path.mkdir(parents=True, exist_ok=True)
 
-        nodes = list(G_nx.nodes())
-        centrality_dict, node_bins, node_colors, legend_patches, bin_labels = (
+        # Cast nodes to int to match cuGraph's renumbered integer vertices
+        nodes = [int(n) for n in G_nx.nodes()]
+
+        centrality_dict, node_bins, node_colors, legend_patches, bin_labels, valid_nodes = (
             compute_betweenness_bins_cugraph(G_cu, nodes)
         )
 
@@ -100,9 +112,12 @@ def main():
         # GPU ForceAtlas2 layout
         pos_original = compute_force_atlas2_positions(G_cu)
 
+        # Build a NetworkX subgraph with only valid_nodes for drawing
+        G_nx_valid = G_nx.subgraph([str(n) for n in valid_nodes]).copy()
+
         plt.figure(figsize=(10, 8))
-        nx.draw_networkx_nodes(G_nx, pos_original, node_size=20, node_color=node_colors)
-        nx.draw_networkx_edges(G_nx, pos_original, alpha=0.3, width=0.5)
+        nx.draw_networkx_nodes(G_nx_valid, pos_original, node_size=20, node_color=node_colors)
+        nx.draw_networkx_edges(G_nx_valid, pos_original, alpha=0.3, width=0.5)
         plt.axis("off")
         plt.title("Original Graph (Betweenness Binned)")
         plt.legend(handles=legend_patches, title="Betweenness Centrality", loc="best")
@@ -126,8 +141,10 @@ def main():
         G_COMMUNITY = cugraph.Graph(directed=False)
         comm_edges = defaultdict(int)
         for u, v in G_nx.edges():
-            cu = node_to_community[u]
-            cv = node_to_community[v]
+            cu = node_to_community.get(int(u))
+            cv = node_to_community.get(int(v))
+            if cu is None or cv is None:
+                continue
             if cu != cv:
                 edge = tuple(sorted((cu, cv)))
                 comm_edges[edge] += 1
@@ -145,9 +162,14 @@ def main():
 
         # Compute betweenness centrality on community metagraph
         comm_nodes = list(communities.keys())
-        centrality_meta, node_bins_meta, node_colors_meta, legend_patches_meta, bin_labels_meta = (
-            compute_betweenness_bins_cugraph(G_COMMUNITY, comm_nodes)
-        )
+        (
+            centrality_meta,
+            node_bins_meta,
+            node_colors_meta,
+            legend_patches_meta,
+            bin_labels_meta,
+            valid_comm_nodes,
+        ) = compute_betweenness_bins_cugraph(G_COMMUNITY, comm_nodes)
 
         # Save community metagraph
         df_meta = cudf.DataFrame(
@@ -168,15 +190,15 @@ def main():
         # Community visualization with GPU layout
         pos_meta = compute_force_atlas2_positions(G_COMMUNITY)
 
-        node_sizes = [len(communities[n]) * 30 for n in comm_nodes]
+        node_sizes = [len(communities[n]) * 30 for n in valid_comm_nodes]
         edge_widths = [
-            comm_edges[(e[0], e[1])]
+            comm_edges.get((e[0], e[1]), comm_edges.get((e[1], e[0]), 1))
             for e in df_comm_edges.to_pandas()[["src", "dst"]].itertuples(index=False, name=None)
         ]
 
         # Build a small NetworkX graph for drawing
         G_COMM_NX = nx.Graph()
-        for comm_id in comm_nodes:
+        for comm_id in valid_comm_nodes:
             G_COMM_NX.add_node(comm_id)
         for u, v, w in df_comm_edges.to_pandas().itertuples(index=False):
             G_COMM_NX.add_edge(u, v, weight=w)
