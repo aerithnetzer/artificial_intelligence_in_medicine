@@ -43,23 +43,13 @@ def compute_betweenness_bins_cugraph(G_cu, nodes, batch_size=500):
 
     cmap = plt.get_cmap("Set2")
     colors = [cmap(i) for i in range(len(bin_labels))]
-
-    # Only include nodes that exist in node_bins (i.e. were present in cuGraph)
-    cu_vertex_set = set(all_vertices)
-    valid_nodes = [n for n in nodes if n in cu_vertex_set]
-    if len(valid_nodes) < len(nodes):
-        logger.warning(
-            f"{len(nodes) - len(valid_nodes)} nodes from NetworkX were not found in cuGraph "
-            f"and will be skipped for coloring."
-        )
-
-    node_colors = [colors[node_bins.get(n, 0)] for n in valid_nodes]
+    node_colors = [colors[node_bins[n]] for n in nodes]
 
     legend_patches = [
         mpatches.Patch(color=colors[i], label=bin_labels[i]) for i in range(len(bin_labels))
     ]
 
-    return bc_dict, node_bins, node_colors, legend_patches, bin_labels, valid_nodes
+    return bc_dict, node_bins, node_colors, legend_patches, bin_labels
 
 
 def compute_force_atlas2_positions(G_cu):
@@ -73,9 +63,16 @@ def main():
         G_nx = initialize_graph(MODE)
         G_nx.remove_nodes_from(list(nx.isolates(G_nx)))
 
-        # Convert to cuGraph
+        # Build explicit integer mapping to handle string node IDs
+        nodes_list = list(G_nx.nodes())
+        node_to_int = {n: i for i, n in enumerate(nodes_list)}
+        int_to_node = {i: n for i, n in enumerate(nodes_list)}
+
         df_edges = cudf.DataFrame(
-            {"src": [int(u) for u, v in G_nx.edges()], "dst": [int(v) for u, v in G_nx.edges()]}
+            {
+                "src": [node_to_int[u] for u, v in G_nx.edges()],
+                "dst": [node_to_int[v] for u, v in G_nx.edges()],
+            }
         )
         G_cu = cugraph.Graph()
         G_cu.from_cudf_edgelist(df_edges, source="src", destination="dst", renumber=True)
@@ -86,32 +83,34 @@ def main():
         results_path = RESULTS_DATA_DIR / MODE
         results_path.mkdir(parents=True, exist_ok=True)
 
-        # Cast nodes to int to match cuGraph's renumbered integer vertices
-        nodes = [int(n) for n in G_nx.nodes()]
-
-        centrality_dict, node_bins, node_colors, legend_patches, bin_labels, valid_nodes = (
-            compute_betweenness_bins_cugraph(G_cu, nodes)
+        # Use integer node IDs for cuGraph operations, map back to original for NetworkX
+        int_nodes = list(range(len(nodes_list)))
+        centrality_dict, node_bins, node_colors, legend_patches, bin_labels = (
+            compute_betweenness_bins_cugraph(G_cu, int_nodes)
         )
 
-        # Save original node betweenness
+        # Remap centrality_dict keys back to original node IDs for saving
+        centrality_dict_orig = {int_to_node[k]: v for k, v in centrality_dict.items()}
+        node_bins_orig = {int_to_node[k]: v for k, v in node_bins.items()}
+
         df_original = cudf.DataFrame(
             {
-                "node_id": list(centrality_dict.keys()),
-                "betweenness_centrality": list(centrality_dict.values()),
-                "centrality_bin": [bin_labels[node_bins[n]] for n in centrality_dict.keys()],
+                "node_id": list(centrality_dict_orig.keys()),
+                "betweenness_centrality": list(centrality_dict_orig.values()),
+                "centrality_bin": [
+                    bin_labels[node_bins_orig[n]] for n in centrality_dict_orig.keys()
+                ],
             }
         )
         df_original.to_csv(results_path / "original_graph_betweenness.csv", index=False)
 
-        # GPU ForceAtlas2 layout
-        pos_original = compute_force_atlas2_positions(G_cu)
-
-        # Build a NetworkX subgraph with only valid_nodes for drawing
-        G_nx_valid = G_nx.subgraph([str(n) for n in valid_nodes]).copy()
+        # GPU ForceAtlas2 layout, remapped to original node IDs
+        pos_original_cu = compute_force_atlas2_positions(G_cu)
+        pos_original = {int_to_node[k]: v for k, v in pos_original_cu.items()}
 
         plt.figure(figsize=(10, 8))
-        nx.draw_networkx_nodes(G_nx_valid, pos_original, node_size=20, node_color=node_colors)
-        nx.draw_networkx_edges(G_nx_valid, pos_original, alpha=0.3, width=0.5)
+        nx.draw_networkx_nodes(G_nx, pos_original, node_size=20, node_color=node_colors)
+        nx.draw_networkx_edges(G_nx, pos_original, alpha=0.3, width=0.5)
         plt.axis("off")
         plt.title("Original Graph (Betweenness Binned)")
         plt.legend(handles=legend_patches, title="Betweenness Centrality", loc="best")
@@ -124,21 +123,21 @@ def main():
         parts, _modularity = cugraph.louvain(G_cu)
         logger.success("Louvain communities computed.")
 
-        # Map nodes to communities
-        node_to_community = dict(zip(parts["vertex"].to_pandas(), parts["partition"].to_pandas()))
+        # Map integer nodes to communities, then remap to original node IDs
+        int_node_to_community = dict(
+            zip(parts["vertex"].to_pandas(), parts["partition"].to_pandas())
+        )
+        node_to_community = {int_to_node[k]: v for k, v in int_node_to_community.items()}
 
         # Build community metagraph
         communities = defaultdict(list)
         for node, comm in node_to_community.items():
             communities[comm].append(node)
 
-        G_COMMUNITY = cugraph.Graph(directed=False)
         comm_edges = defaultdict(int)
         for u, v in G_nx.edges():
-            cu = node_to_community.get(int(u))
-            cv = node_to_community.get(int(v))
-            if cu is None or cv is None:
-                continue
+            cu = node_to_community[u]
+            cv = node_to_community[v]
             if cu != cv:
                 edge = tuple(sorted((cu, cv)))
                 comm_edges[edge] += 1
@@ -150,22 +149,17 @@ def main():
                 "weight": list(comm_edges.values()),
             }
         )
+        G_COMMUNITY = cugraph.Graph(directed=False)
         G_COMMUNITY.from_cudf_edgelist(
             df_comm_edges, source="src", destination="dst", edge_attr="weight"
         )
 
         # Compute betweenness centrality on community metagraph
         comm_nodes = list(communities.keys())
-        (
-            centrality_meta,
-            node_bins_meta,
-            node_colors_meta,
-            legend_patches_meta,
-            bin_labels_meta,
-            valid_comm_nodes,
-        ) = compute_betweenness_bins_cugraph(G_COMMUNITY, comm_nodes)
+        centrality_meta, node_bins_meta, node_colors_meta, legend_patches_meta, bin_labels_meta = (
+            compute_betweenness_bins_cugraph(G_COMMUNITY, comm_nodes)
+        )
 
-        # Save community metagraph
         df_meta = cudf.DataFrame(
             {
                 "community_id": list(centrality_meta.keys()),
@@ -181,21 +175,18 @@ def main():
         )
         df_meta.to_csv(results_path / "community_metagraph_betweenness.csv", index=False)
 
-        # Community visualization with GPU layout
+        # Community visualization — community IDs are already integers, no remapping needed
         pos_meta = compute_force_atlas2_positions(G_COMMUNITY)
 
-        node_sizes = [len(communities[n]) * 30 for n in valid_comm_nodes]
-        edge_widths = [
-            comm_edges.get((e[0], e[1]), comm_edges.get((e[1], e[0]), 1))
-            for e in df_comm_edges.to_pandas()[["src", "dst"]].itertuples(index=False, name=None)
-        ]
+        node_sizes = [len(communities[n]) * 30 for n in comm_nodes]
 
-        # Build a small NetworkX graph for drawing
         G_COMM_NX = nx.Graph()
-        for comm_id in valid_comm_nodes:
+        for comm_id in comm_nodes:
             G_COMM_NX.add_node(comm_id)
         for u, v, w in df_comm_edges.to_pandas().itertuples(index=False):
             G_COMM_NX.add_edge(u, v, weight=w)
+
+        edge_widths = [comm_edges[tuple(sorted((u, v)))] for u, v in G_COMM_NX.edges()]
 
         plt.figure(figsize=(8, 6))
         nx.draw_networkx_nodes(
@@ -210,7 +201,6 @@ def main():
         plt.savefig(figures_path / "community_metagraph.svg")
         plt.close()
 
-        # Key stats
         key_stats = {
             "length_of_communities": len(communities),
             "num_meta_edges": len(comm_edges),
