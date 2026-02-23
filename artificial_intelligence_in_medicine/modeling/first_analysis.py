@@ -63,14 +63,8 @@ def compute_betweenness_bins_cugraph(G_cu, nodes, batch_size=500):
 
 
 def compute_force_atlas2_positions(G_cu):
-    """
-    Compute ForceAtlas2 layout for cuGraph.
-    Returns a dictionary {node_id: (x, y)} for plotting in matplotlib.
-    """
-    fa2_df = cugraph.force_atlas2(G_cu)
-    pos = {
-        row["vertex"]: (row["x"], row["y"]) for row in fa2_df.to_pandas().itertuples(index=False)
-    }
+    fa2_df = cugraph.force_atlas2(G_cu).to_pandas()
+    pos = {row.vertex: (row.x, row.y) for row in fa2_df.itertuples(index=False)}
     return pos
 
 
