@@ -14,7 +14,7 @@ MODES = ["ARTIFICIAL_INTELLIGENCE", "GENE_EXPRESSION", "NULL"]
 
 def compute_betweenness_bins_cugraph(G_cu, nodes):
     logger.info("Computing betweenness centrality on GPU...")
-    bc_df = cugraph.betweenness_centrality(G_cu, normalized=True)
+    bc_df = cugraph.betweenness_centrality(G_cu, normalized=True, k=1_000)
     logger.success("Betweenness centrality computed.")
 
     bc_dict = dict(zip(bc_df["vertex"].to_pandas(), bc_df["betweenness_centrality"].to_pandas()))
