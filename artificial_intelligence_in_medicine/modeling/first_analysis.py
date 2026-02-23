@@ -35,7 +35,7 @@ def compute_betweenness_bins_cugraph(G_cu, nodes, batch_size=500):
     bin_labels = ["0.0–0.2", "0.2–0.4", "0.4–0.6", "0.6–0.8", "0.8–1.0"]
 
     node_bins = {}
-    for node in nodes:
+    for node in bc_dict.keys():  # <-- iterate bc_dict, not nodes
         value = bc_dict.get(node, 0.0)
         bin_index = np.digitize(value, bins, right=True) - 1
         bin_index = max(0, min(bin_index, len(bin_labels) - 1))
@@ -43,7 +43,7 @@ def compute_betweenness_bins_cugraph(G_cu, nodes, batch_size=500):
 
     cmap = plt.get_cmap("Set2")
     colors = [cmap(i) for i in range(len(bin_labels))]
-    node_colors = [colors[node_bins[n]] for n in nodes]
+    node_colors = [colors[node_bins[n]] for n in nodes]  # nodes still used here for ordering
 
     legend_patches = [
         mpatches.Patch(color=colors[i], label=bin_labels[i]) for i in range(len(bin_labels))
