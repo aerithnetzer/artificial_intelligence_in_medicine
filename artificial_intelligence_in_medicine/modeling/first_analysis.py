@@ -6,8 +6,7 @@ import numpy as np
 import matplotlib.patches as mpatches
 from collections import defaultdict
 import pandas as pd
-
-from artificial_intelligence_in_medicine.main import initialize_graph
+from _graphs_helpers import initialize_graph
 
 MODES = ["ARTIFICIAL_INTELLIGENCE", "GENE_EXPRESSION", "NULL"]
 
@@ -45,7 +44,7 @@ def compute_betweenness_bins(G):
 
 def main():
     for MODE in MODES:
-        G = initialize_graph()
+        G = initialize_graph(MODE)
         G.remove_nodes_from(list(nx.isolates(G)))
 
         figures_path = FIGURES_DIR / MODE
