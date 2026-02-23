@@ -1,23 +1,22 @@
+from loguru import logger
 import networkx as nx
-from artificial_intelligence_in_medicine.config import (
-    DATA_DIR,
-    FIGURES_DIR,
-    INTERIM_DATA_DIR,
-    RESULTS_DATA_DIR,
-)
+from artificial_intelligence_in_medicine.config import DATA_DIR, FIGURES_DIR, RESULTS_DATA_DIR
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.patches as mpatches
 from collections import defaultdict
 import pandas as pd
-from _graphs_helpers import initialize_graph
+
+from artificial_intelligence_in_medicine.main import initialize_graph
 
 MODES = ["ARTIFICIAL_INTELLIGENCE", "GENE_EXPRESSION", "NULL"]
 
 
-def compute_constraint_bins(G):
-    constraint_dict = nx.constraint(G)
+def compute_betweenness_bins(G):
+    logger.info("Now calculating centrailty")
+    centrality_dict = nx.betweenness_centrality(G, normalized=True)
 
+    logger.success("Centrality completed.")
     bins = np.arange(0.0, 1.01, 0.2)
     bin_labels = [
         "0.0–0.2",
@@ -28,7 +27,7 @@ def compute_constraint_bins(G):
     ]
 
     node_bins = {}
-    for node, value in constraint_dict.items():
+    for node, value in centrality_dict.items():
         bin_index = np.digitize(value, bins, right=True) - 1
         bin_index = max(0, min(bin_index, len(bin_labels) - 1))
         node_bins[node] = bin_index
@@ -41,12 +40,12 @@ def compute_constraint_bins(G):
         mpatches.Patch(color=colors[i], label=bin_labels[i]) for i in range(len(bin_labels))
     ]
 
-    return constraint_dict, node_bins, node_colors, legend_patches, bin_labels
+    return centrality_dict, node_bins, node_colors, legend_patches, bin_labels
 
 
 def main():
     for MODE in MODES:
-        G: nx.DiGraph[str] = initialize_graph(mode=MODE)
+        G = initialize_graph()
         G.remove_nodes_from(list(nx.isolates(G)))
 
         figures_path = FIGURES_DIR / MODE
@@ -55,18 +54,18 @@ def main():
         results_path = RESULTS_DATA_DIR / MODE
         results_path.mkdir(parents=True, exist_ok=True)
 
-        constraint_dict, node_bins, node_colors, legend_patches, bin_labels = (
-            compute_constraint_bins(G)
+        centrality_dict, node_bins, node_colors, legend_patches, bin_labels = (
+            compute_betweenness_bins(G)
         )
 
         df_original = pd.DataFrame(
             {
-                "node_id": list(constraint_dict.keys()),
-                "constraint": list(constraint_dict.values()),
-                "constraint_bin": [bin_labels[node_bins[n]] for n in constraint_dict.keys()],
+                "node_id": list(centrality_dict.keys()),
+                "betweenness_centrality": list(centrality_dict.values()),
+                "centrality_bin": [bin_labels[node_bins[n]] for n in centrality_dict.keys()],
             }
         )
-        df_original.to_csv(results_path / "original_graph_constraints.csv", index=False)
+        df_original.to_csv(results_path / "original_graph_betweenness.csv", index=False)
 
         pos_original = nx.spring_layout(G, seed=42)
 
@@ -74,8 +73,8 @@ def main():
         nx.draw_networkx_nodes(G, pos_original, node_size=20, node_color=node_colors)
         nx.draw_networkx_edges(G, pos_original, alpha=0.3, width=0.5)
         plt.axis("off")
-        plt.title("Original Graph (Constraint Binned)")
-        plt.legend(handles=legend_patches, title="Constraint Score", loc="best")
+        plt.title("Original Graph (Betweenness Binned)")
+        plt.legend(handles=legend_patches, title="Betweenness Centrality", loc="best")
         plt.tight_layout()
         plt.savefig(figures_path / "original_graph.svg")
         plt.close()
@@ -103,27 +102,27 @@ def main():
         for (cu, cv), weight in edge_weights.items():
             G_COMMUNITY.add_edge(cu, cv, weight=weight)
 
-        constraint_meta, node_bins_meta, node_colors_meta, legend_patches_meta, bin_labels_meta = (
-            compute_constraint_bins(G_COMMUNITY)
+        centrality_meta, node_bins_meta, node_colors_meta, legend_patches_meta, bin_labels_meta = (
+            compute_betweenness_bins(G_COMMUNITY)
         )
 
         df_meta = pd.DataFrame(
             {
-                "community_id": list(constraint_meta.keys()),
-                "constraint": list(constraint_meta.values()),
-                "constraint_bin": [
-                    bin_labels_meta[node_bins_meta[n]] for n in constraint_meta.keys()
+                "community_id": list(centrality_meta.keys()),
+                "betweenness_centrality": list(centrality_meta.values()),
+                "centrality_bin": [
+                    bin_labels_meta[node_bins_meta[n]] for n in centrality_meta.keys()
                 ],
                 "num_members": [
-                    G_COMMUNITY.nodes[n]["num_members"] for n in constraint_meta.keys()
+                    G_COMMUNITY.nodes[n]["num_members"] for n in centrality_meta.keys()
                 ],
                 "member_node_ids": [
                     ";".join(map(str, G_COMMUNITY.nodes[n]["members"]))
-                    for n in constraint_meta.keys()
+                    for n in centrality_meta.keys()
                 ],
             }
         )
-        df_meta.to_csv(results_path / "community_metagraph_constraints.csv", index=False)
+        df_meta.to_csv(results_path / "community_metagraph_betweenness.csv", index=False)
 
         node_sizes = [G_COMMUNITY.nodes[n]["num_members"] * 30 for n in G_COMMUNITY.nodes()]
 
@@ -146,8 +145,8 @@ def main():
         )
         nx.draw_networkx_labels(G_COMMUNITY, pos_meta, font_size=8)
         plt.axis("off")
-        plt.title("Community Meta-Graph (Constraint Binned)")
-        plt.legend(handles=legend_patches_meta, title="Constraint Score", loc="best")
+        plt.title("Community Meta-Graph (Betweenness Binned)")
+        plt.legend(handles=legend_patches_meta, title="Betweenness Centrality", loc="best")
         plt.tight_layout()
         plt.savefig(figures_path / "community_metagraph.svg")
         plt.close()
