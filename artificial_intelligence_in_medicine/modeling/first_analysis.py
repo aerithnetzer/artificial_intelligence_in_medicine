@@ -22,15 +22,23 @@ def clean_graph(G_nx):
     G_nx.remove_edges_from(nx.selfloop_edges(G_nx))
 
     logger.info("Keeping largest connected component")
-    if not nx.is_connected(G_nx):
-        largest_cc = max(nx.connected_components(G_nx), key=len)
-        G_nx = G_nx.subgraph(largest_cc).copy()
+
+    if G_nx.number_of_nodes() == 0:
+        return G_nx
+
+    if G_nx.is_directed():
+        components = nx.weakly_connected_components(G_nx)
+    else:
+        components = nx.connected_components(G_nx)
+
+    largest_cc = max(components, key=len)
+    G_nx = G_nx.subgraph(largest_cc).copy()
 
     logger.info("Removing isolates")
     G_nx.remove_nodes_from(list(nx.isolates(G_nx)))
 
     logger.success(
-        f"Graph cleaned: {G_nx.number_of_nodes()} nodes, {G_nx.number_of_edges()} edges"
+        f"Cleaned graph: {G_nx.number_of_nodes()} nodes, {G_nx.number_of_edges()} edges"
     )
 
     return G_nx
