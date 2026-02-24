@@ -34,7 +34,6 @@ def nx_to_igraph(G_nx):
 # Constraint + binning
 # ------------------------------------------------------------
 def compute_constraint_bins(G_ig):
-
     logger.info(f"Computing structural constraint for {G_ig.vcount()} nodes")
 
     start = time.time()
@@ -57,14 +56,10 @@ def compute_constraint_bins(G_ig):
     node_colors = [colors[node_bins[i]] for i in range(G_ig.vcount())]
 
     legend_patches = [
-        mpatches.Patch(color=colors[i], label=bin_labels[i])
-        for i in range(len(bin_labels))
+        mpatches.Patch(color=colors[i], label=bin_labels[i]) for i in range(len(bin_labels))
     ]
 
-    constraint_dict = {
-        G_ig.vs[i]["name"]: constraint_vals[i]
-        for i in range(G_ig.vcount())
-    }
+    constraint_dict = {G_ig.vs[i]["pmid"]: constraint_vals[i] for i in range(G_ig.vcount())}
 
     return constraint_dict, node_bins, node_colors, legend_patches, bin_labels
 
@@ -73,9 +68,7 @@ def compute_constraint_bins(G_ig):
 # MAIN
 # ------------------------------------------------------------
 def main():
-
     for MODE in tqdm(MODES, desc="Modes"):
-
         logger.info(f"Processing mode: {MODE}")
 
         # --------------------------------------------
@@ -104,9 +97,7 @@ def main():
             {
                 "node_id": list(constraint_dict.keys()),
                 "constraint": list(constraint_dict.values()),
-                "constraint_bin": [
-                    bin_labels[node_bins[i]] for i in range(len(node_bins))
-                ],
+                "constraint_bin": [bin_labels[node_bins[i]] for i in range(len(node_bins))],
             }
         )
 
@@ -187,13 +178,11 @@ def main():
                 "community_id": list(range(len(communities))),
                 "constraint": list(constraint_meta.values()),
                 "constraint_bin": [
-                    bin_labels_meta[node_bins_meta[i]]
-                    for i in range(len(node_bins_meta))
+                    bin_labels_meta[node_bins_meta[i]] for i in range(len(node_bins_meta))
                 ],
                 "num_members": [len(communities[i]) for i in range(len(communities))],
                 "member_node_ids": [
-                    ";".join(map(str, communities[i]))
-                    for i in range(len(communities))
+                    ";".join(map(str, communities[i])) for i in range(len(communities))
                 ],
             }
         )
