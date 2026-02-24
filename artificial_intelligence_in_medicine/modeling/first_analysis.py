@@ -207,7 +207,7 @@ def main():
         # --------------------------------------------
         logger.info("Saving community meta-graph")
 
-        G_comm.write_graphml(results_path / "community_metagraph.graphml")
+        G_comm.write_graphml(str(results_path / "community_metagraph.graphml"))
 
         edge_df = pd.DataFrame(
             {
