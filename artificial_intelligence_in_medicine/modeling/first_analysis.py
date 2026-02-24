@@ -12,7 +12,7 @@ import networkx as nx
 MODES = ["ARTIFICIAL_INTELLIGENCE", "GENE_EXPRESSION", "NULL"]
 
 
-def compute_betweenness_bins_cugraph(G_cu, nodes, batch_size=500):
+def compute_betweenness_bins_cugraph(G_cu, batch_size=500):
     logger.info("Computing betweenness centrality on GPU (batched)...")
     all_vertices = G_cu.nodes().to_pandas().tolist()
 
@@ -20,12 +20,10 @@ def compute_betweenness_bins_cugraph(G_cu, nodes, batch_size=500):
     num_batches = -(-len(all_vertices) // batch_size)
 
     for i in range(0, len(all_vertices), batch_size):
-        batch = all_vertices[i : i + batch_size]
+        batch = all_vertices[i:i + batch_size]
         logger.info(f"Processing batch {i // batch_size + 1} / {num_batches}")
         bc_df = cugraph.betweenness_centrality(G_cu, normalized=True, k=batch)
-        for vertex, score in zip(
-            bc_df["vertex"].to_pandas(), bc_df["betweenness_centrality"].to_pandas()
-        ):
+        for vertex, score in zip(bc_df["vertex"].to_pandas(), bc_df["betweenness_centrality"].to_pandas()):
             accumulated[vertex] += score
 
     bc_dict = {v: score / num_batches for v, score in accumulated.items()}
@@ -36,14 +34,14 @@ def compute_betweenness_bins_cugraph(G_cu, nodes, batch_size=500):
 
     node_bins = {}
     for node in bc_dict.keys():
-        value = bc_dict.get(node, 0.0)
+        value = bc_dict[node]
         bin_index = np.digitize(value, bins, right=True) - 1
         bin_index = max(0, min(bin_index, len(bin_labels) - 1))
         node_bins[node] = bin_index
 
     cmap = plt.get_cmap("Set2")
     colors = [cmap(i) for i in range(len(bin_labels))]
-    node_colors = [colors[node_bins[n]] for n in nodes]
+    node_colors = [colors[node_bins[n]] for n in all_vertices]
 
     legend_patches = [
         mpatches.Patch(color=colors[i], label=bin_labels[i]) for i in range(len(bin_labels))
@@ -68,12 +66,10 @@ def main():
         node_to_int = {n: i for i, n in enumerate(nodes_list)}
         int_to_node = {i: n for i, n in enumerate(nodes_list)}
 
-        df_edges = cudf.DataFrame(
-            {
-                "src": [node_to_int[u] for u, v in G_nx.edges()],
-                "dst": [node_to_int[v] for u, v in G_nx.edges()],
-            }
-        )
+        df_edges = cudf.DataFrame({
+            "src": [node_to_int[u] for u, v in G_nx.edges()],
+            "dst": [node_to_int[v] for u, v in G_nx.edges()],
+        })
         G_cu = cugraph.Graph()
         G_cu.from_cudf_edgelist(df_edges, source="src", destination="dst", renumber=True)
 
@@ -83,13 +79,11 @@ def main():
         results_path = RESULTS_DATA_DIR / MODE
         results_path.mkdir(parents=True, exist_ok=True)
 
-        # Use integer node IDs for cuGraph operations, map back to original for NetworkX
-        int_nodes = list(range(len(nodes_list)))
         centrality_dict, node_bins, node_colors, legend_patches, bin_labels = (
-            compute_betweenness_bins_cugraph(G_cu, int_nodes)
+            compute_betweenness_bins_cugraph(G_cu)
         )
 
-        # Remap centrality_dict keys back to original node IDs for saving
+        # Remap centrality results back to original node IDs
         centrality_dict_orig = {int_to_node[k]: v for k, v in centrality_dict.items()}
         node_bins_orig = {int_to_node[k]: v for k, v in node_bins.items()}
 
@@ -97,9 +91,7 @@ def main():
             {
                 "node_id": list(centrality_dict_orig.keys()),
                 "betweenness_centrality": list(centrality_dict_orig.values()),
-                "centrality_bin": [
-                    bin_labels[node_bins_orig[n]] for n in centrality_dict_orig.keys()
-                ],
+                "centrality_bin": [bin_labels[node_bins_orig[n]] for n in centrality_dict_orig.keys()],
             }
         )
         df_original.to_csv(results_path / "original_graph_betweenness.csv", index=False)
@@ -124,9 +116,7 @@ def main():
         logger.success("Louvain communities computed.")
 
         # Map integer nodes to communities, then remap to original node IDs
-        int_node_to_community = dict(
-            zip(parts["vertex"].to_pandas(), parts["partition"].to_pandas())
-        )
+        int_node_to_community = dict(zip(parts["vertex"].to_pandas(), parts["partition"].to_pandas()))
         node_to_community = {int_to_node[k]: v for k, v in int_node_to_community.items()}
 
         # Build community metagraph
@@ -142,10 +132,15 @@ def main():
                 edge = tuple(sorted((cu, cv)))
                 comm_edges[edge] += 1
 
+        # Build explicit integer mapping for community metagraph
+        comm_nodes = list(communities.keys())
+        comm_to_int = {c: i for i, c in enumerate(comm_nodes)}
+        int_to_comm = {i: c for i, c in enumerate(comm_nodes)}
+
         df_comm_edges = cudf.DataFrame(
             {
-                "src": [e[0] for e in comm_edges.keys()],
-                "dst": [e[1] for e in comm_edges.keys()],
+                "src": [comm_to_int[e[0]] for e in comm_edges.keys()],
+                "dst": [comm_to_int[e[1]] for e in comm_edges.keys()],
                 "weight": list(comm_edges.values()),
             }
         )
@@ -154,37 +149,40 @@ def main():
             df_comm_edges, source="src", destination="dst", edge_attr="weight"
         )
 
-        # Compute betweenness centrality on community metagraph
-        comm_nodes = list(communities.keys())
         centrality_meta, node_bins_meta, node_colors_meta, legend_patches_meta, bin_labels_meta = (
-            compute_betweenness_bins_cugraph(G_COMMUNITY, comm_nodes)
+            compute_betweenness_bins_cugraph(G_COMMUNITY)
         )
+
+        # Remap back to original community IDs
+        centrality_meta_orig = {int_to_comm[k]: v for k, v in centrality_meta.items()}
+        node_bins_meta_orig = {int_to_comm[k]: v for k, v in node_bins_meta.items()}
 
         df_meta = cudf.DataFrame(
             {
-                "community_id": list(centrality_meta.keys()),
-                "betweenness_centrality": list(centrality_meta.values()),
+                "community_id": list(centrality_meta_orig.keys()),
+                "betweenness_centrality": list(centrality_meta_orig.values()),
                 "centrality_bin": [
-                    bin_labels_meta[node_bins_meta[n]] for n in centrality_meta.keys()
+                    bin_labels_meta[node_bins_meta_orig[n]] for n in centrality_meta_orig.keys()
                 ],
-                "num_members": [len(communities[n]) for n in centrality_meta.keys()],
+                "num_members": [len(communities[n]) for n in centrality_meta_orig.keys()],
                 "member_node_ids": [
-                    ";".join(map(str, communities[n])) for n in centrality_meta.keys()
+                    ";".join(map(str, communities[n])) for n in centrality_meta_orig.keys()
                 ],
             }
         )
         df_meta.to_csv(results_path / "community_metagraph_betweenness.csv", index=False)
 
-        # Community visualization — community IDs are already integers, no remapping needed
-        pos_meta = compute_force_atlas2_positions(G_COMMUNITY)
+        # Community visualization, remapped to original community IDs
+        pos_meta_cu = compute_force_atlas2_positions(G_COMMUNITY)
+        pos_meta = {int_to_comm[k]: v for k, v in pos_meta_cu.items()}
 
         node_sizes = [len(communities[n]) * 30 for n in comm_nodes]
 
         G_COMM_NX = nx.Graph()
         for comm_id in comm_nodes:
             G_COMM_NX.add_node(comm_id)
-        for u, v, w in df_comm_edges.to_pandas().itertuples(index=False):
-            G_COMM_NX.add_edge(u, v, weight=w)
+        for e, w in comm_edges.items():
+            G_COMM_NX.add_edge(e[0], e[1], weight=w)
 
         edge_widths = [comm_edges[tuple(sorted((u, v)))] for u, v in G_COMM_NX.edges()]
 
