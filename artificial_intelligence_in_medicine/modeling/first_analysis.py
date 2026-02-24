@@ -25,7 +25,14 @@ def nx_to_igraph(G_nx):
     G_ig = ig.Graph()
     G_ig.add_vertices(len(mapping))
     G_ig.add_edges(edges)
+
+    # Node name = PMID string
     G_ig.vs["name"] = [reverse_mapping[i] for i in range(len(mapping))]
+
+    # Copy all NetworkX node attributes
+    attr_keys = ["title", "year", "matched_country", "matched_name", "matched_lat", "matched_lon"]
+    for attr in attr_keys:
+        G_ig.vs[attr] = [G_nx.nodes[reverse_mapping[i]].get(attr) for i in range(len(mapping))]
 
     return G_ig
 
@@ -59,7 +66,7 @@ def compute_constraint_bins(G_ig):
         mpatches.Patch(color=colors[i], label=bin_labels[i]) for i in range(len(bin_labels))
     ]
 
-    constraint_dict = {G_ig.vs[i]["pmid"]: constraint_vals[i] for i in range(G_ig.vcount())}
+    constraint_dict = {G_ig.vs[i]["name"]: constraint_vals[i] for i in range(G_ig.vcount())}
 
     return constraint_dict, node_bins, node_colors, legend_patches, bin_labels
 
