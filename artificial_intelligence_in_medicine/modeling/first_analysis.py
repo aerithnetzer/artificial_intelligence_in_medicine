@@ -15,7 +15,7 @@ MODES = ["ARTIFICIAL_INTELLIGENCE", "GENE_EXPRESSION", "NULL"]
 
 
 # ------------------------------------------------------------
-# Graph Cleaning (NetworkX level)
+# Graph Cleaning
 # ------------------------------------------------------------
 def clean_graph(G_nx):
     logger.info("Removing self-loops")
@@ -52,11 +52,10 @@ def nx_to_igraph(G_nx):
     reverse_mapping = {i: node for node, i in mapping.items()}
     edges = [(mapping[u], mapping[v]) for u, v in G_nx.edges()]
 
-    G_ig = ig.Graph()
+    G_ig = ig.Graph(directed=False)
     G_ig.add_vertices(len(mapping))
     G_ig.add_edges(edges)
 
-    # Canonical node ID
     G_ig.vs["name"] = [reverse_mapping[i] for i in range(len(mapping))]
 
     attr_keys = [
@@ -89,12 +88,7 @@ def compute_constraint_bins(G_ig):
     bin_labels = ["0.0–0.2", "0.2–0.4", "0.4–0.6", "0.6–0.8", "0.8–1.0"]
 
     node_bins = {}
-    for i, value in tqdm(
-        enumerate(constraint_vals),
-        total=len(constraint_vals),
-        desc="Computing bins",
-        leave=False,
-    ):
+    for i, value in enumerate(constraint_vals):
         bin_index = np.digitize(value, bins, right=True) - 1
         bin_index = max(0, min(bin_index, len(bin_labels) - 1))
         node_bins[i] = bin_index
@@ -124,7 +118,6 @@ def main():
         # --------------------------------------------
         G_nx = initialize_graph(MODE)
         G_nx = clean_graph(G_nx)
-
         G_ig = nx_to_igraph(G_nx)
 
         figures_path = FIGURES_DIR / MODE
@@ -178,12 +171,9 @@ def main():
         # Louvain community detection
         # --------------------------------------------
         logger.info("Running Louvain community detection...")
-        start = time.time()
         partition = G_ig.community_multilevel()
-        elapsed = time.time() - start
-        logger.success(f"Louvain detected {len(partition)} communities in {elapsed:.2f}s")
-
         membership = partition.membership
+        logger.success(f"Detected {len(partition)} communities")
 
         communities = defaultdict(list)
         for i, comm_id in enumerate(membership):
@@ -204,18 +194,53 @@ def main():
                 edge = tuple(sorted((cu, cv)))
                 comm_edges[edge] += 1
 
-        G_comm = ig.Graph()
+        G_comm = ig.Graph(directed=False)
         G_comm.add_vertices(len(communities))
         G_comm.add_edges(list(comm_edges.keys()))
 
         G_comm.vs["name"] = list(range(len(communities)))
+        G_comm.vs["num_members"] = [len(communities[i]) for i in range(len(communities))]
+        G_comm.es["weight"] = [comm_edges[e.tuple] for e in G_comm.es]
+
+        # --------------------------------------------
+        # Save community meta-graph
+        # --------------------------------------------
+        logger.info("Saving community meta-graph")
+
+        G_comm.write_graphml(results_path / "community_metagraph.graphml")
+
+        edge_df = pd.DataFrame(
+            {
+                "source": [G_comm.vs[e.tuple[0]]["name"] for e in G_comm.es],
+                "target": [G_comm.vs[e.tuple[1]]["name"] for e in G_comm.es],
+                "weight": G_comm.es["weight"],
+            }
+        )
+
+        edge_df.to_csv(
+            results_path / "community_metagraph_edges.csv",
+            index=False,
+        )
+
+        node_df = pd.DataFrame(
+            {
+                "community_id": G_comm.vs["name"],
+                "num_members": G_comm.vs["num_members"],
+                "member_node_ids": [
+                    ";".join(map(str, communities[i])) for i in range(len(communities))
+                ],
+            }
+        )
+
+        node_df.to_csv(
+            results_path / "community_metagraph_nodes.csv",
+            index=False,
+        )
 
         # --------------------------------------------
         # Constraint on meta graph
         # --------------------------------------------
-        constraint_meta, node_bins_meta, node_colors_meta, legend_patches_meta, bin_labels_meta = (
-            compute_constraint_bins(G_comm)
-        )
+        constraint_meta, node_bins_meta, _, _, bin_labels_meta = compute_constraint_bins(G_comm)
 
         df_meta = pd.DataFrame(
             {
@@ -224,10 +249,7 @@ def main():
                 "constraint_bin": [
                     bin_labels_meta[node_bins_meta[i]] for i in range(len(node_bins_meta))
                 ],
-                "num_members": [len(communities[i]) for i in range(len(communities))],
-                "member_node_ids": [
-                    ";".join(map(str, communities[i])) for i in range(len(communities))
-                ],
+                "num_members": G_comm.vs["num_members"],
             }
         )
 
