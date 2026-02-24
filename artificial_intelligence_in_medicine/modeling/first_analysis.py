@@ -15,6 +15,28 @@ MODES = ["ARTIFICIAL_INTELLIGENCE", "GENE_EXPRESSION", "NULL"]
 
 
 # ------------------------------------------------------------
+# Graph Cleaning (NetworkX level)
+# ------------------------------------------------------------
+def clean_graph(G_nx):
+    logger.info("Removing self-loops")
+    G_nx.remove_edges_from(nx.selfloop_edges(G_nx))
+
+    logger.info("Keeping largest connected component")
+    if not nx.is_connected(G_nx):
+        largest_cc = max(nx.connected_components(G_nx), key=len)
+        G_nx = G_nx.subgraph(largest_cc).copy()
+
+    logger.info("Removing isolates")
+    G_nx.remove_nodes_from(list(nx.isolates(G_nx)))
+
+    logger.success(
+        f"Graph cleaned: {G_nx.number_of_nodes()} nodes, {G_nx.number_of_edges()} edges"
+    )
+
+    return G_nx
+
+
+# ------------------------------------------------------------
 # Convert NetworkX → igraph
 # ------------------------------------------------------------
 def nx_to_igraph(G_nx):
@@ -26,11 +48,18 @@ def nx_to_igraph(G_nx):
     G_ig.add_vertices(len(mapping))
     G_ig.add_edges(edges)
 
-    # Node name = PMID string
+    # Canonical node ID
     G_ig.vs["name"] = [reverse_mapping[i] for i in range(len(mapping))]
 
-    # Copy all NetworkX node attributes
-    attr_keys = ["title", "year", "matched_country", "matched_name", "matched_lat", "matched_lon"]
+    attr_keys = [
+        "title",
+        "year",
+        "matched_country",
+        "matched_name",
+        "matched_lat",
+        "matched_lon",
+    ]
+
     for attr in attr_keys:
         G_ig.vs[attr] = [G_nx.nodes[reverse_mapping[i]].get(attr) for i in range(len(mapping))]
 
@@ -46,14 +75,18 @@ def compute_constraint_bins(G_ig):
     start = time.time()
     constraint_vals = G_ig.constraint()
     elapsed = time.time() - start
-
     logger.success(f"Constraint computed in {elapsed:.2f} seconds")
 
     bins = np.arange(0.0, 1.01, 0.2)
     bin_labels = ["0.0–0.2", "0.2–0.4", "0.4–0.6", "0.6–0.8", "0.8–1.0"]
 
     node_bins = {}
-    for i, value in tqdm(enumerate(constraint_vals), desc="Computing bins"):
+    for i, value in tqdm(
+        enumerate(constraint_vals),
+        total=len(constraint_vals),
+        desc="Computing bins",
+        leave=False,
+    ):
         bin_index = np.digitize(value, bins, right=True) - 1
         bin_index = max(0, min(bin_index, len(bin_labels) - 1))
         node_bins[i] = bin_index
@@ -79,10 +112,11 @@ def main():
         logger.info(f"Processing mode: {MODE}")
 
         # --------------------------------------------
-        # Load graph
+        # Load + clean graph
         # --------------------------------------------
         G_nx = initialize_graph(MODE)
-        G_nx.remove_nodes_from(list(nx.isolates(G_nx)))
+        G_nx = clean_graph(G_nx)
+
         G_ig = nx_to_igraph(G_nx)
 
         figures_path = FIGURES_DIR / MODE
@@ -97,9 +131,7 @@ def main():
         constraint_dict, node_bins, node_colors, legend_patches, bin_labels = (
             compute_constraint_bins(G_ig)
         )
-        logger.info("Finished computing constraints")
 
-        logger.info("Building DF")
         df_original = pd.DataFrame(
             {
                 "node_id": list(constraint_dict.keys()),
@@ -108,13 +140,14 @@ def main():
             }
         )
 
-        df_original.to_csv(results_path / "original_graph_constraint.csv", index=False)
+        df_original.to_csv(
+            results_path / "original_graph_constraint.csv",
+            index=False,
+        )
 
-        logger.info("Saved df original")
         # --------------------------------------------
         # Plot original graph
         # --------------------------------------------
-        logger.info("Plotting layout")
         layout = G_ig.layout("fr")
 
         fig, ax = plt.subplots(figsize=(10, 8))
@@ -133,7 +166,6 @@ def main():
         plt.savefig(figures_path / "original_graph.svg")
         plt.close()
 
-        logger.info("Finished plotting")
         # --------------------------------------------
         # Louvain community detection
         # --------------------------------------------
@@ -146,12 +178,7 @@ def main():
         membership = partition.membership
 
         communities = defaultdict(list)
-        for i, comm_id in tqdm(
-            enumerate(membership),
-            total=len(membership),
-            desc="Assigning communities",
-            leave=False,
-        ):
+        for i, comm_id in enumerate(membership):
             communities[comm_id].append(G_ig.vs[i]["name"])
 
         # --------------------------------------------
@@ -161,7 +188,7 @@ def main():
 
         comm_edges = defaultdict(int)
 
-        for e in tqdm(G_ig.es, desc="Meta edges", leave=False):
+        for e in G_ig.es:
             u, v = e.tuple
             cu = membership[u]
             cv = membership[v]
@@ -173,6 +200,8 @@ def main():
         G_comm.add_vertices(len(communities))
         G_comm.add_edges(list(comm_edges.keys()))
 
+        G_comm.vs["name"] = list(range(len(communities)))
+
         # --------------------------------------------
         # Constraint on meta graph
         # --------------------------------------------
@@ -182,7 +211,7 @@ def main():
 
         df_meta = pd.DataFrame(
             {
-                "community_id": list(range(len(communities))),
+                "community_id": list(constraint_meta.keys()),
                 "constraint": list(constraint_meta.values()),
                 "constraint_bin": [
                     bin_labels_meta[node_bins_meta[i]] for i in range(len(node_bins_meta))
@@ -198,38 +227,6 @@ def main():
             results_path / "community_metagraph_constraint.csv",
             index=False,
         )
-
-        # --------------------------------------------
-        # Plot meta graph
-        # --------------------------------------------
-        layout_meta = G_comm.layout("fr")
-
-        fig, ax = plt.subplots(figsize=(8, 6))
-        ig.plot(
-            G_comm,
-            target=ax,
-            layout=layout_meta,
-            vertex_size=[len(communities[i]) * 10 for i in range(len(communities))],
-            vertex_color=node_colors_meta,
-            edge_width=[comm_edges[e.tuple] for e in G_comm.es],
-        )
-
-        plt.title("Community Meta-Graph (Constraint Binned)")
-        plt.legend(handles=legend_patches_meta, title="Constraint", loc="best")
-        plt.tight_layout()
-        plt.savefig(figures_path / "community_metagraph.svg")
-        plt.close()
-
-        key_stats = {
-            "length_of_communities": len(communities),
-            "num_meta_edges": len(comm_edges),
-            "num_original_nodes": G_ig.vcount(),
-            "num_original_edges": G_ig.ecount(),
-        }
-
-        with open(results_path / "summary.txt", "w") as f:
-            for k, v in key_stats.items():
-                f.write(f"{k}: {v}\n")
 
         logger.success(f"Finished mode: {MODE}")
 
