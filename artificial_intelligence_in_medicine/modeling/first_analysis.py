@@ -39,15 +39,12 @@ def compute_betweenness_bins_cugraph(G_cu, batch_size=500):
         bin_index = max(0, min(bin_index, len(bin_labels) - 1))
         node_bins[node] = bin_index
 
-    cmap = plt.get_cmap("Set2")
-    colors = [cmap(i) for i in range(len(bin_labels))]
-    node_colors = [colors[node_bins[n]] for n in all_vertices]
-
     legend_patches = [
-        mpatches.Patch(color=colors[i], label=bin_labels[i]) for i in range(len(bin_labels))
+        mpatches.Patch(color=plt.get_cmap("Set2")(i), label=bin_labels[i])
+        for i in range(len(bin_labels))
     ]
 
-    return bc_dict, node_bins, node_colors, legend_patches, bin_labels
+    return bc_dict, node_bins, legend_patches, bin_labels
 
 
 def compute_force_atlas2_positions(G_cu):
@@ -71,7 +68,7 @@ def main():
             "dst": [node_to_int[v] for u, v in G_nx.edges()],
         })
         G_cu = cugraph.Graph()
-        G_cu.from_cudf_edgelist(df_edges, source="src", destination="dst", renumber=True)
+        G_cu.from_cudf_edgelist(df_edges, source="src", destination="dst", renumber=False)
 
         figures_path = FIGURES_DIR / MODE
         figures_path.mkdir(parents=True, exist_ok=True)
@@ -79,7 +76,7 @@ def main():
         results_path = RESULTS_DATA_DIR / MODE
         results_path.mkdir(parents=True, exist_ok=True)
 
-        centrality_dict, node_bins, node_colors, legend_patches, bin_labels = (
+        centrality_dict, node_bins, legend_patches, bin_labels = (
             compute_betweenness_bins_cugraph(G_cu)
         )
 
@@ -99,6 +96,11 @@ def main():
         # GPU ForceAtlas2 layout, remapped to original node IDs
         pos_original_cu = compute_force_atlas2_positions(G_cu)
         pos_original = {int_to_node[k]: v for k, v in pos_original_cu.items()}
+
+        # Build node colors ordered by G_nx.nodes()
+        cmap = plt.get_cmap("Set2")
+        colors = [cmap(i) for i in range(len(bin_labels))]
+        node_colors = [colors[node_bins_orig[n]] for n in G_nx.nodes()]
 
         plt.figure(figsize=(10, 8))
         nx.draw_networkx_nodes(G_nx, pos_original, node_size=20, node_color=node_colors)
@@ -146,10 +148,10 @@ def main():
         )
         G_COMMUNITY = cugraph.Graph(directed=False)
         G_COMMUNITY.from_cudf_edgelist(
-            df_comm_edges, source="src", destination="dst", edge_attr="weight"
+            df_comm_edges, source="src", destination="dst", edge_attr="weight", renumber=False
         )
 
-        centrality_meta, node_bins_meta, node_colors_meta, legend_patches_meta, bin_labels_meta = (
+        centrality_meta, node_bins_meta, legend_patches_meta, bin_labels_meta = (
             compute_betweenness_bins_cugraph(G_COMMUNITY)
         )
 
@@ -176,14 +178,19 @@ def main():
         pos_meta_cu = compute_force_atlas2_positions(G_COMMUNITY)
         pos_meta = {int_to_comm[k]: v for k, v in pos_meta_cu.items()}
 
-        node_sizes = [len(communities[n]) * 30 for n in comm_nodes]
-
+        # Build community NetworkX graph
         G_COMM_NX = nx.Graph()
         for comm_id in comm_nodes:
             G_COMM_NX.add_node(comm_id)
         for e, w in comm_edges.items():
             G_COMM_NX.add_edge(e[0], e[1], weight=w)
 
+        # Build node colors ordered by G_COMM_NX.nodes()
+        cmap_meta = plt.get_cmap("Set2")
+        colors_meta = [cmap_meta(i) for i in range(len(bin_labels_meta))]
+        node_colors_meta = [colors_meta[node_bins_meta_orig[n]] for n in G_COMM_NX.nodes()]
+
+        node_sizes = [len(communities[n]) * 30 for n in G_COMM_NX.nodes()]
         edge_widths = [comm_edges[tuple(sorted((u, v)))] for u, v in G_COMM_NX.edges()]
 
         plt.figure(figsize=(8, 6))
