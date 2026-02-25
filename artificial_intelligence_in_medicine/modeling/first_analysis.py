@@ -1,22 +1,21 @@
-from loguru import logger
-import pandas as pd
-from artificial_intelligence_in_medicine.config import FIGURES_DIR, RESULTS_DATA_DIR
-import matplotlib.pyplot as plt
-import numpy as np
-import matplotlib.patches as mpatches
 from collections import defaultdict
-from _graphs_helpers import initialize_graph
-import igraph as ig
-import networkx as nx
-from tqdm import tqdm
 import time
+
+import igraph as ig
+from loguru import logger
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
+
+from _graphs_helpers import initialize_graph
+from artificial_intelligence_in_medicine.config import FIGURES_DIR, RESULTS_DATA_DIR
 
 MODES = ["ARTIFICIAL_INTELLIGENCE", "GENE_EXPRESSION", "NULL"]
 
 
-# ------------------------------------------------------------
-# Graph Cleaning
-# ------------------------------------------------------------
 def clean_graph(G_nx):
     logger.info("Removing self-loops")
     G_nx.remove_edges_from(nx.selfloop_edges(G_nx))
@@ -44,9 +43,39 @@ def clean_graph(G_nx):
     return G_nx
 
 
-# ------------------------------------------------------------
-# Convert NetworkX → igraph
-# ------------------------------------------------------------
+def power_law_fit(G_ig) -> ig.FittedPowerLaw:
+    pass
+
+
+def generate_cluster_graph(G_ig, MODE):
+    # Generate community clusters
+    communities = G_ig.community_leiden()
+    communities = communities.as_clustering()
+
+    for i, community in enumerate(communities):
+        with open(RESULTS_DATA_DIR / MODE / "community_list_{i:05d}.txt") as f:
+            f.write(f"Community {i}")
+            for v in community:
+                print(f"\t{G_ig.vs[v]['title']}---{G_ig.vs[v]['name']}")
+    num_communities = len(communities)
+    palette1 = ig.RainbowPalette(n=num_communities)
+    for i, community in enumerate(communities):
+        G_ig.vs[community]["color"] = i
+        community_edges = G_ig.es.select(_within=community)
+        community_edges["color"] = ig.vs["title"] = ["\n\n" + label for label in G_ig.vs["title"]]
+        fig1, ax1 = plt.subplots()
+    ig.plot(
+        communities,
+        target=ax1,
+        mark_groups=True,
+        palette=palette1,
+        vertex_size=15,
+        edge_width=0.5,
+    )
+    fig1.set_size_inches(20, 20)
+    fig1.savefig(RESULTS_DATA_DIR / MODE / "community_leiden_cluastergraph.png", dpi=400)
+
+
 def nx_to_igraph(G_nx):
     mapping = {node: i for i, node in enumerate(G_nx.nodes())}
     reverse_mapping = {i: node for node, i in mapping.items()}
@@ -73,9 +102,6 @@ def nx_to_igraph(G_nx):
     return G_ig
 
 
-# ------------------------------------------------------------
-# Constraint + binning
-# ------------------------------------------------------------
 def compute_constraint_bins(G_ig):
     logger.info(f"Computing structural constraint for {G_ig.vcount()} nodes")
 
@@ -106,29 +132,20 @@ def compute_constraint_bins(G_ig):
     return constraint_dict, node_bins, node_colors, legend_patches, bin_labels
 
 
-# ------------------------------------------------------------
-# MAIN
-# ------------------------------------------------------------
 def main():
     for MODE in tqdm(MODES, desc="Modes"):
         logger.info(f"Processing mode: {MODE}")
 
-        # --------------------------------------------
-        # Load + clean graph
-        # --------------------------------------------
         G_nx = initialize_graph(MODE)
         G_nx = clean_graph(G_nx)
         G_ig = nx_to_igraph(G_nx)
-
+        generate_cluster_graph(G_ig, MODE)
         figures_path = FIGURES_DIR / MODE
         figures_path.mkdir(parents=True, exist_ok=True)
 
         results_path = RESULTS_DATA_DIR / MODE
         results_path.mkdir(parents=True, exist_ok=True)
 
-        # --------------------------------------------
-        # Constraint on original graph
-        # --------------------------------------------
         constraint_dict, node_bins, node_colors, legend_patches, bin_labels = (
             compute_constraint_bins(G_ig)
         )
@@ -146,12 +163,9 @@ def main():
             index=False,
         )
 
-        # --------------------------------------------
-        # Plot original graph
-        # --------------------------------------------
-        layout = G_ig.layout("fr")
+        layout = G_ig.layout("drl")
 
-        fig, ax = plt.subplots(figsize=(10, 8))
+        fig, ax = plt.subplots(figsize=(20, 16))
         ig.plot(
             G_ig,
             target=ax,
@@ -258,9 +272,6 @@ def main():
             index=False,
         )
 
-        # --------------------------------------------
-        # Plot community meta-graph
-        # --------------------------------------------
         logger.info("Plotting community meta-graph")
 
         cmap = plt.get_cmap("Set2")
@@ -270,9 +281,9 @@ def main():
         import math
 
         vertex_sizes = [3 + 1.5 * math.log1p(n) for n in G_comm.vs["num_members"]]
-        layout_comm = G_comm.layout("fr")
+        layout_comm = G_comm.layout("drl")
 
-        fig, ax = plt.subplots(figsize=(10, 8))
+        fig, ax = plt.subplots(figsize=(20, 16))
         ig.plot(
             G_comm,
             target=ax,
