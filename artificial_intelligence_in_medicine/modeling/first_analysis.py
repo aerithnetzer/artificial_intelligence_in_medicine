@@ -52,7 +52,7 @@ def generate_cluster_graph(G_ig, MODE):
     communities = G_ig.community_leiden()
 
     for i, community in enumerate(communities):
-        with open(RESULTS_DATA_DIR / MODE / "community_list_{i:05d}.txt") as f:
+        with open(RESULTS_DATA_DIR / MODE / "community_list_{i:05d}.txt", "w") as f:
             f.write(f"Community {i}")
             for v in community:
                 print(f"\t{G_ig.vs[v]['title']}---{G_ig.vs[v]['name']}")
