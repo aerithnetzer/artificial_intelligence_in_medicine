@@ -267,6 +267,9 @@ def main():
         colors_meta = [cmap(i) for i in range(len(bin_labels_meta))]
         node_colors_meta = [colors_meta[node_bins_meta[i]] for i in range(G_comm.vcount())]
 
+        import math
+
+        vertex_sizes = [3 + 1.5 * math.log1p(n) for n in G_comm.vs["num_members"]]
         layout_comm = G_comm.layout("fr")
 
         fig, ax = plt.subplots(figsize=(10, 8))
@@ -274,9 +277,9 @@ def main():
             G_comm,
             target=ax,
             layout=layout_comm,
-            vertex_size=0.5,
+            vertex_size=vertex_sizes,
             vertex_color=node_colors_meta,
-            edge_width=[0.5 * w for w in G_comm.es["weight"]],
+            edge_width=[0.3 + 0.8 * math.log1p(w) for w in G_comm.es["weight"]],
         )
 
         plt.title("Community Meta-Graph (Constraint Binned)")
