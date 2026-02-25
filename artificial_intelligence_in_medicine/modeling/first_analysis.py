@@ -274,6 +274,7 @@ def main():
             G_comm,
             target=ax,
             layout=layout_comm,
+            vertex_size=0.5,
             vertex_color=node_colors_meta,
             edge_width=[0.5 * w for w in G_comm.es["weight"]],
         )
