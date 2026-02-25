@@ -267,7 +267,6 @@ def main():
         colors_meta = [cmap(i) for i in range(len(bin_labels_meta))]
         node_colors_meta = [colors_meta[node_bins_meta[i]] for i in range(G_comm.vcount())]
 
-        vertex_sizes = [5 + 2 * n for n in G_comm.vs["num_members"]]
         layout_comm = G_comm.layout("fr")
 
         fig, ax = plt.subplots(figsize=(10, 8))
@@ -275,7 +274,6 @@ def main():
             G_comm,
             target=ax,
             layout=layout_comm,
-            vertex_size=vertex_sizes,
             vertex_color=node_colors_meta,
             edge_width=[0.5 * w for w in G_comm.es["weight"]],
         )
