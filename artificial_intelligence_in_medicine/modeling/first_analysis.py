@@ -279,7 +279,7 @@ def main():
             layout=layout_comm,
             vertex_size=vertex_sizes,
             vertex_color=node_colors_meta,
-            edge_width=[0.3 + 0.8 * math.log1p(w) for w in G_comm.es["weight"]],
+            edge_width = [0.2 + 1.0 * (w - w_min) / (w_max - w_min) for w in weights]
         )
 
         plt.title("Community Meta-Graph (Constraint Binned)")
