@@ -61,7 +61,9 @@ def generate_cluster_graph(G_ig, MODE):
     for i, community in enumerate(communities):
         G_ig.vs[community]["color"] = i
         community_edges = G_ig.es.select(_within=community)
-        community_edges["color"] = ig.vs["title"] = ["\n\n" + label for label in G_ig.vs["title"]]
+        community_edges["color"] = G_ig.vs["title"] = [
+            "\n\n" + label for label in G_ig.vs["title"]
+        ]
         fig1, ax1 = plt.subplots()
     ig.plot(
         communities,
