@@ -75,6 +75,7 @@ def generate_cluster_graph(G_ig, MODE):
     )
     fig1.set_size_inches(20, 20)
     fig1.savefig(RESULTS_DATA_DIR / MODE / "community_leiden_cluastergraph.png", dpi=400)
+    plt.close(fig1)
 
 
 def nx_to_igraph(G_nx):
