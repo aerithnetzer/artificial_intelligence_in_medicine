@@ -50,20 +50,33 @@ def power_law_fit(G_ig) -> ig.FittedPowerLaw:
 def generate_cluster_graph(G_ig, MODE):
     # Generate community clusters
     communities = G_ig.community_leiden()
+    num_communities = len(communities)
+
+    # --- Fix 1: Mutate titles ONCE before the loop, not on every iteration ---
+    G_ig.vs["title"] = ["\n\n" + (label or "") for label in G_ig.vs["title"]]
+
+    # --- Fix 2: Cache attribute lists once rather than fetching per-vertex ---
+    all_titles = G_ig.vs["title"]
+    all_names = G_ig.vs["name"]
+
+    palette1 = ig.RainbowPalette(n=num_communities)
+
+    # --- Fix 3: Batch all community file writes; fix f-string bug (was missing f-prefix) ---
+    output_dir = RESULTS_DATA_DIR / MODE
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     for i, community in enumerate(communities):
-        with open(RESULTS_DATA_DIR / MODE / "community_list_{i:05d}.txt", "w") as f:
-            f.write(f"Community {i}")
-            for v in community:
-                print(f"\t{G_ig.vs[v]['title']}---{G_ig.vs[v]['name']}")
-    num_communities = len(communities)
-    palette1 = ig.RainbowPalette(n=num_communities)
-    for i, community in enumerate(communities):
+        # Collect lines first, then write once per file
+        lines = [f"Community {i}\n"]
+        lines.extend(f"\t{all_titles[v]}---{all_names[v]}\n" for v in community)
+        with open(output_dir / f"community_list_{i:05d}.txt", "w") as f:
+            f.writelines(lines)
+
+        # --- Fix 4: Set colors per community (this part was correct, kept as-is) ---
         G_ig.vs[community]["color"] = i
         community_edges = G_ig.es.select(_within=community)
-        community_edges["color"] = G_ig.vs["title"] = [
-            "\n\n" + label for label in G_ig.vs["title"]
-        ]
+        community_edges["color"] = i
+
     fig1, ax1 = plt.subplots()
     ig.plot(
         communities,
@@ -74,7 +87,7 @@ def generate_cluster_graph(G_ig, MODE):
         edge_width=0.5,
     )
     fig1.set_size_inches(20, 20)
-    fig1.savefig(RESULTS_DATA_DIR / MODE / "community_leiden_cluastergraph.png", dpi=400)
+    fig1.savefig(output_dir / "community_leiden_clustergraph.png", dpi=400)
     plt.close(fig1)
 
 
@@ -292,7 +305,7 @@ def main():
             layout=layout_comm,
             vertex_size=vertex_sizes,
             vertex_color=node_colors_meta,
-            edge_width=[0.2 + 1.0 * (w - w_min) / (w_max - w_min) for w in weights],
+            edge_width=[0.3 + 0.8 * math.log1p(w) for w in G_comm.es["weight"]],
         )
 
         plt.title("Community Meta-Graph (Constraint Binned)")
