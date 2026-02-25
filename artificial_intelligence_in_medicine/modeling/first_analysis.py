@@ -48,31 +48,31 @@ def power_law_fit(G_ig) -> ig.FittedPowerLaw:
 
 
 def generate_cluster_graph(G_ig, MODE):
+    # Work on a copy to avoid mutating the caller's graph
+    G_ig = G_ig.copy()
+
     # Generate community clusters
     communities = G_ig.community_leiden()
     num_communities = len(communities)
 
-    # --- Fix 1: Mutate titles ONCE before the loop, not on every iteration ---
+    # Mutate titles ONCE before the loop, not on every iteration
     G_ig.vs["title"] = ["\n\n" + (label or "") for label in G_ig.vs["title"]]
 
-    # --- Fix 2: Cache attribute lists once rather than fetching per-vertex ---
+    # Cache attribute lists once rather than fetching per-vertex
     all_titles = G_ig.vs["title"]
     all_names = G_ig.vs["name"]
 
     palette1 = ig.RainbowPalette(n=num_communities)
 
-    # --- Fix 3: Batch all community file writes; fix f-string bug (was missing f-prefix) ---
     output_dir = RESULTS_DATA_DIR / MODE
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for i, community in enumerate(communities):
-        # Collect lines first, then write once per file
         lines = [f"Community {i}\n"]
         lines.extend(f"\t{all_titles[v]}---{all_names[v]}\n" for v in community)
         with open(output_dir / f"community_list_{i:05d}.txt", "w") as f:
             f.writelines(lines)
 
-        # --- Fix 4: Set colors per community (this part was correct, kept as-is) ---
         G_ig.vs[community]["color"] = i
         community_edges = G_ig.es.select(_within=community)
         community_edges["color"] = i
