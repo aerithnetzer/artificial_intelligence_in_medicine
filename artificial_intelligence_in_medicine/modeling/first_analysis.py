@@ -50,7 +50,6 @@ def power_law_fit(G_ig) -> ig.FittedPowerLaw:
 def generate_cluster_graph(G_ig, MODE):
     # Generate community clusters
     communities = G_ig.community_leiden()
-    communities = communities.as_clustering()
 
     for i, community in enumerate(communities):
         with open(RESULTS_DATA_DIR / MODE / "community_list_{i:05d}.txt") as f:
@@ -290,7 +289,7 @@ def main():
             layout=layout_comm,
             vertex_size=vertex_sizes,
             vertex_color=node_colors_meta,
-            edge_width = [0.2 + 1.0 * (w - w_min) / (w_max - w_min) for w in weights]
+            edge_width=[0.2 + 1.0 * (w - w_min) / (w_max - w_min) for w in weights],
         )
 
         plt.title("Community Meta-Graph (Constraint Binned)")
