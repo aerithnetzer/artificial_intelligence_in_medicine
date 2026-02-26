@@ -49,31 +49,30 @@ def power_law_fit(G_ig) -> ig.FittedPowerLaw:
 
 def generate_cluster_graph(G_ig, MODE):
     G_ig = G_ig.copy()
-    communities = G_ig.community_leiden()
+    communities = G_ig.community_leiden(resolution_parameter=0.1)
     num_communities = len(communities)
-
     G_ig.vs["title"] = ["\n\n" + (label or "") for label in G_ig.vs["title"]]
-    all_titles = G_ig.vs["title"]
-    all_names = G_ig.vs["name"]
-
     palette1 = ig.RainbowPalette(n=num_communities)
     output_dir = FIGURES_DIR / MODE
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Calculate layout once — fr spreads nodes to minimize overlap
-    layout = G_ig.layout_fruchterman_reingold()
-
+    n = G_ig.vcount()
+    layout = G_ig.layout_fruchterman_reingold(
+        niter=500,
+        repulserad=n * 5,
+        maxdelta=n,
+    )
+    layout.scale(3.0)
     fig1, ax1 = plt.subplots()
     ig.plot(
         communities,
         target=ax1,
-        layout=layout,  # <-- apply the layout
+        layout=layout,
         mark_groups=True,
         palette=palette1,
         vertex_size=2,
         edge_width=0.1,
     )
-    fig1.set_size_inches(20, 20)
+    fig1.set_size_inches(10, 10)
     fig1.savefig(output_dir / "community_leiden_clustergraph.png", dpi=800)
     plt.close(fig1)
 
