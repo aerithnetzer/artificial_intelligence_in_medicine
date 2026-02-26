@@ -57,7 +57,7 @@ def generate_cluster_graph(G_ig, MODE):
     output_dir.mkdir(parents=True, exist_ok=True)
     layout = G_ig.layout_fruchterman_reingold(
         niter=1000,
-        start_temp=G_ig.vcount() ** 0.5,  # higher start temp = more movement = more spread
+        start_temp=G_ig.vcount() ** 0.5,
     )
     layout.scale(3.0)
     fig1, ax1 = plt.subplots()
@@ -70,6 +70,9 @@ def generate_cluster_graph(G_ig, MODE):
         vertex_size=2,
         edge_width=0.1,
     )
+    ax1.autoscale()
+    ax1.set_aspect("equal")
+    fig1.tight_layout()
     fig1.set_size_inches(10, 10)
     fig1.savefig(output_dir / "community_leiden_clustergraph.png", dpi=800)
     plt.close(fig1)
@@ -273,11 +276,11 @@ def main():
 
         logger.info("Plotting community meta-graph")
 
+        import math
+
         cmap = plt.get_cmap("Set2")
         colors_meta = [cmap(i) for i in range(len(bin_labels_meta))]
         node_colors_meta = [colors_meta[node_bins_meta[i]] for i in range(G_comm.vcount())]
-
-        import math
 
         vertex_sizes = [3 + 1.5 * math.log1p(n) for n in G_comm.vs["num_members"]]
         layout_comm = G_comm.layout("drl")
@@ -291,6 +294,8 @@ def main():
             vertex_color=node_colors_meta,
             edge_width=[0.3 + 0.8 * math.log1p(w) for w in G_comm.es["weight"]],
         )
+        ax.autoscale()
+        ax.set_aspect("equal")
 
         plt.title("Community Meta-Graph (Constraint Binned)")
         plt.legend(handles=legend_patches, title="Constraint", loc="best")
