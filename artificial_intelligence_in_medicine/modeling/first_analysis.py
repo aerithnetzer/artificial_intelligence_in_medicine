@@ -48,23 +48,16 @@ def power_law_fit(G_ig) -> ig.FittedPowerLaw:
 
 
 def generate_cluster_graph(G_ig, MODE):
-    # Work on a copy to avoid mutating the caller's graph
     G_ig = G_ig.copy()
-
-    # Generate community clusters
     communities = G_ig.community_leiden()
     num_communities = len(communities)
 
-    # Mutate titles ONCE before the loop, not on every iteration
     G_ig.vs["title"] = ["\n\n" + (label or "") for label in G_ig.vs["title"]]
-
-    # Cache attribute lists once rather than fetching per-vertex
     all_titles = G_ig.vs["title"]
     all_names = G_ig.vs["name"]
 
     palette1 = ig.RainbowPalette(n=num_communities)
-
-    output_dir = RESULTS_DATA_DIR / MODE
+    output_dir = FIGURES_DIR / MODE
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for i, community in enumerate(communities):
@@ -72,22 +65,25 @@ def generate_cluster_graph(G_ig, MODE):
         lines.extend(f"\t{all_titles[v]}---{all_names[v]}\n" for v in community)
         with open(output_dir / f"community_list_{i:05d}.txt", "w") as f:
             f.writelines(lines)
-
         G_ig.vs[community]["color"] = i
         community_edges = G_ig.es.select(_within=community)
         community_edges["color"] = i
+
+    # Calculate layout once — fr spreads nodes to minimize overlap
+    layout = G_ig.layout_fruchterman_reingold()
 
     fig1, ax1 = plt.subplots()
     ig.plot(
         communities,
         target=ax1,
+        layout=layout,  # <-- apply the layout
         mark_groups=True,
         palette=palette1,
-        vertex_size=15,
+        vertex_size=2,
         edge_width=0.5,
     )
     fig1.set_size_inches(20, 20)
-    fig1.savefig(output_dir / "community_leiden_clustergraph.png", dpi=400)
+    fig1.savefig(output_dir / "community_leiden_clustergraph.png", dpi=800)
     plt.close(fig1)
 
 
