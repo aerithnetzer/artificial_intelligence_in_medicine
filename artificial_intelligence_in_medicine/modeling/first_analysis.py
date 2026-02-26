@@ -55,11 +55,9 @@ def generate_cluster_graph(G_ig, MODE):
     palette1 = ig.RainbowPalette(n=num_communities)
     output_dir = FIGURES_DIR / MODE
     output_dir.mkdir(parents=True, exist_ok=True)
-    n = G_ig.vcount()
     layout = G_ig.layout_fruchterman_reingold(
-        niter=500,
-        repulserad=n * 5,
-        maxdelta=n,
+        niter=1000,
+        start_temp=G_ig.vcount() ** 0.5,  # higher start temp = more movement = more spread
     )
     layout.scale(3.0)
     fig1, ax1 = plt.subplots()
