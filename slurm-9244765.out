@@ -1,77 +1,0 @@
-warning: Indexes specified via `--index-url` will not be persisted to the `pyproject.toml` file; use `--default-index` instead.
-  × No solution found when resolving dependencies:
-  ╰─▶ Because basemap was not found in the package registry and your
-      project depends on basemap>=2.0.0, we can conclude that your project's
-      requirements are unsatisfiable.
-  help: If you want to add the package regardless of the failed resolution,
-        provide the `--frozen` flag to skip locking and syncing.
-2026-02-20 14:05:36.823 | INFO     | artificial_intelligence_in_medicine.config:<module>:11 - PROJ_ROOT path is: /gpfs/projects/p32234/projects/aerith/artificial_intelligence_in_medicine
-[32m2026-02-20 14:06:58.746[0m | [1mINFO    [0m | [36martificial_intelligence_in_medicine.modeling._graphs_helpers[0m:[36minitialize_graph[0m:[36m265[0m - [1mInitializing graph for citation modeling.[0m
-[32m2026-02-20 14:07:05.864[0m | [1mINFO    [0m | [36martificial_intelligence_in_medicine.modeling._graphs_helpers[0m:[36minitialize_graph[0m:[36m269[0m - [1mAvailable columns: ['pmid', 'title', 'year', 'mesh_headings', 'author_list', 'grant_list', 'cited_by', 'affiliation'][0m
-[32m2026-02-20 14:07:05.864[0m | [1mINFO    [0m | [36martificial_intelligence_in_medicine.modeling._graphs_helpers[0m:[36minitialize_graph[0m:[36m270[0m - [1mNumber of articles in NULL: 152564[0m
-[32m2026-02-20 14:07:05.864[0m | [1mINFO    [0m | [36martificial_intelligence_in_medicine.modeling._graphs_helpers[0m:[36minitialize_graph[0m:[36m277[0m - [1mUsing 'pmid' as PMID column[0m
-[32m2026-02-20 14:07:05.864[0m | [1mINFO    [0m | [36martificial_intelligence_in_medicine.modeling._graphs_helpers[0m:[36minitialize_graph[0m:[36m279[0m - [1mNow adding nodes to the graph.[0m
-[32m2026-02-20 14:07:05.864[0m | [1mINFO    [0m | [36martificial_intelligence_in_medicine.modeling._graphs_helpers[0m:[36minitialize_graph[0m:[36m280[0m - [1mNow adding nodes to the graph.[0m
-Adding nodes: 0it [00:00, ?it/s]Adding nodes: 795it [00:00, 7947.37it/s]Adding nodes: 2079it [00:00, 10823.85it/s]Adding nodes: 3375it [00:00, 11798.37it/s]Adding nodes: 4646it [00:00, 12156.16it/s]Adding nodes: 5918it [00:00, 12358.08it/s]Adding nodes: 7207it [00:00, 12538.30it/s]Adding nodes: 8506it [00:00, 12682.80it/s]Adding nodes: 9792it [00:00, 12736.30it/s]Adding nodes: 11081it [00:00, 12783.54it/s]Adding nodes: 12369it [00:01, 12811.89it/s]Adding nodes: 13667it [00:01, 12862.32it/s]Adding nodes: 14954it [00:01, 12859.81it/s]Adding nodes: 16250it [00:01, 12889.18it/s]Adding nodes: 17539it [00:01, 12870.77it/s]Adding nodes: 18831it [00:01, 12883.74it/s]Adding nodes: 20120it [00:01, 12858.19it/s]Adding nodes: 21411it [00:01, 12872.68it/s]Adding nodes: 22699it [00:01, 12847.27it/s]Adding nodes: 23984it [00:01, 12835.21it/s]Adding nodes: 25278it [00:02, 12864.66it/s]Adding nodes: 26565it [00:02, 12847.66it/s]Adding nodes: 27857it [00:02, 12868.18it/s]Adding nodes: 29144it [00:02, 12846.40it/s]Adding nodes: 30435it [00:02, 12864.08it/s]Adding nodes: 31722it [00:02, 12842.53it/s]Adding nodes: 33007it [00:02, 12677.72it/s]Adding nodes: 34276it [00:02, 12586.37it/s]Adding nodes: 35538it [00:02, 12596.04it/s]Adding nodes: 36798it [00:02, 12572.14it/s]Adding nodes: 38062it [00:03, 12590.03it/s]Adding nodes: 39322it [00:03, 12567.27it/s]Adding nodes: 40585it [00:03, 12585.91it/s]Adding nodes: 41844it [00:03, 12560.56it/s]Adding nodes: 43107it [00:03, 12580.74it/s]Adding nodes: 44366it [00:03, 12504.83it/s]Adding nodes: 45617it [00:03, 12498.33it/s]Adding nodes: 46877it [00:03, 12526.10it/s]Adding nodes: 48130it [00:03, 12510.32it/s]Adding nodes: 49398it [00:03, 12558.92it/s]Adding nodes: 50667it [00:04, 12597.23it/s]Adding nodes: 51950it [00:04, 12665.21it/s]Adding nodes: 53222it [00:04, 12681.35it/s]Adding nodes: 54506it [00:04, 12725.82it/s]Adding nodes: 55779it [00:04, 12722.25it/s]Adding nodes: 57052it [00:04, 12721.05it/s]Adding nodes: 58325it [00:04, 12713.64it/s]Adding nodes: 59609it [00:04, 12748.87it/s]Adding nodes: 60884it [00:04, 12735.30it/s]Adding nodes: 62166it [00:04, 12759.08it/s]Adding nodes: 63449it [00:05, 12777.48it/s]Adding nodes: 64727it [00:05, 12751.51it/s]Adding nodes: 66009it [00:05, 12769.56it/s]Adding nodes: 67286it [00:05, 12588.99it/s]Adding nodes: 68557it [00:05, 12622.24it/s]Adding nodes: 69820it [00:05, 12611.96it/s]Adding nodes: 71090it [00:05, 12636.19it/s]Adding nodes: 72354it [00:05, 12617.91it/s]Adding nodes: 73626it [00:05, 12646.28it/s]Adding nodes: 74891it [00:05, 12626.51it/s]Adding nodes: 76163it [00:06, 12652.68it/s]Adding nodes: 77429it [00:06, 12630.66it/s]Adding nodes: 78701it [00:06, 12657.00it/s]Adding nodes: 79967it [00:06, 12642.26it/s]Adding nodes: 81241it [00:06, 12669.09it/s]Adding nodes: 82508it [00:06, 12654.49it/s]Adding nodes: 83782it [00:06, 12678.06it/s]Adding nodes: 85059it [00:06, 12704.17it/s]Adding nodes: 86330it [00:06, 12699.39it/s]Adding nodes: 87600it [00:06, 12341.19it/s]Adding nodes: 88881it [00:07, 12478.15it/s]Adding nodes: 90175it [00:07, 12612.68it/s]Adding nodes: 91457it [00:07, 12671.95it/s]Adding nodes: 92751it [00:07, 12750.04it/s]Adding nodes: 94031it [00:07, 12762.91it/s]Adding nodes: 95324it [00:07, 12812.20it/s]Adding nodes: 96606it [00:07, 12803.28it/s]Adding nodes: 97899it [00:07, 12838.70it/s]Adding nodes: 99184it [00:07, 12825.44it/s]Adding nodes: 100477it [00:07, 12855.14it/s]Adding nodes: 101763it [00:08, 12778.62it/s]Adding nodes: 103055it [00:08, 12820.08it/s]Adding nodes: 104338it [00:08, 12815.99it/s]Adding nodes: 105630it [00:08, 12844.58it/s]Adding nodes: 106921it [00:08, 12862.33it/s]Adding nodes: 108208it [00:08, 12838.83it/s]Adding nodes: 109500it [00:08, 12860.73it/s]Adding nodes: 110787it [00:08, 12836.55it/s]Adding nodes: 112078it [00:08, 12856.28it/s]Adding nodes: 113364it [00:08, 12834.20it/s]Adding nodes: 114655it [00:09, 12854.31it/s]Adding nodes: 115941it [00:09, 12837.59it/s]Adding nodes: 117229it [00:09, 12848.76it/s]Adding nodes: 118514it [00:09, 12822.59it/s]Adding nodes: 119805it [00:09, 12846.62it/s]Adding nodes: 121090it [00:09, 12821.19it/s]Adding nodes: 122381it [00:09, 12845.52it/s]Adding nodes: 123666it [00:09, 12830.24it/s]Adding nodes: 124957it [00:09, 12852.22it/s]Adding nodes: 126243it [00:09, 12832.41it/s]Adding nodes: 127532it [00:10, 12848.47it/s]Adding nodes: 128817it [00:10, 12829.35it/s]Adding nodes: 130105it [00:10, 12844.07it/s]Adding nodes: 131394it [00:10, 12855.37it/s]Adding nodes: 132680it [00:10, 12826.80it/s]Adding nodes: 133969it [00:10, 12844.20it/s]Adding nodes: 135254it [00:10, 12778.10it/s]Adding nodes: 136541it [00:10, 12803.41it/s]Adding nodes: 137822it [00:10, 12794.91it/s]Adding nodes: 139112it [00:10, 12825.97it/s]Adding nodes: 140395it [00:11, 12809.85it/s]Adding nodes: 141685it [00:11, 12836.64it/s]Adding nodes: 142969it [00:11, 12817.40it/s]Adding nodes: 144258it [00:11, 12837.21it/s]Adding nodes: 145542it [00:11, 12812.57it/s]Adding nodes: 146833it [00:11, 12841.50it/s]Adding nodes: 148118it [00:11, 12815.46it/s]Adding nodes: 149409it [00:11, 12841.11it/s]Adding nodes: 150694it [00:11, 12824.53it/s]Adding nodes: 151984it [00:11, 12845.18it/s]Adding nodes: 152564it [00:11, 12716.91it/s]
-[32m2026-02-20 14:07:17.862[0m | [1mINFO    [0m | [36martificial_intelligence_in_medicine.modeling._graphs_helpers[0m:[36minitialize_graph[0m:[36m296[0m - [1mNow adding edges to the graph.[0m
-Adding edges: 0it [00:00, ?it/s]Adding edges: 806it [00:00, 8057.89it/s]Adding edges: 3322it [00:00, 18115.26it/s]Adding edges: 5860it [00:00, 21429.65it/s]Adding edges: 8429it [00:00, 23108.78it/s]Adding edges: 10990it [00:00, 24008.65it/s]Adding edges: 13571it [00:00, 24618.66it/s]Adding edges: 16149it [00:00, 24997.50it/s]Adding edges: 18705it [00:00, 25174.83it/s]Adding edges: 21281it [00:00, 25354.44it/s]Adding edges: 23878it [00:01, 25543.10it/s]Adding edges: 26433it [00:01, 25199.33it/s]Adding edges: 28990it [00:01, 25309.98it/s]Adding edges: 31576it [00:01, 25475.38it/s]Adding edges: 34159it [00:01, 25579.52it/s]Adding edges: 36733it [00:01, 25626.27it/s]Adding edges: 39297it [00:01, 25625.48it/s]Adding edges: 41880it [00:01, 25685.70it/s]Adding edges: 44458it [00:01, 25713.38it/s]Adding edges: 47035it [00:01, 25728.39it/s]Adding edges: 49608it [00:02, 25490.58it/s]Adding edges: 52189it [00:02, 25585.67it/s]Adding edges: 54779it [00:02, 25678.67it/s]Adding edges: 57356it [00:02, 25703.43it/s]Adding edges: 59927it [00:02, 25629.08it/s]Adding edges: 62516it [00:02, 25704.27it/s]Adding edges: 65087it [00:02, 25681.02it/s]Adding edges: 67673it [00:02, 25733.01it/s]Adding edges: 70259it [00:02, 25768.36it/s]Adding edges: 72836it [00:02, 25726.06it/s]Adding edges: 75423it [00:03, 25768.75it/s]Adding edges: 78003it [00:03, 25777.83it/s]Adding edges: 80606it [00:03, 25853.09it/s]Adding edges: 83200it [00:03, 25877.06it/s]Adding edges: 85802it [00:03, 25918.41it/s]Adding edges: 88394it [00:03, 25897.10it/s]Adding edges: 90984it [00:03, 25847.42it/s]Adding edges: 93569it [00:03, 25807.45it/s]Adding edges: 96150it [00:03, 25756.42it/s]Adding edges: 98726it [00:03, 25141.14it/s]Adding edges: 101321it [00:04, 25377.05it/s]Adding edges: 103901it [00:04, 25500.79it/s]Adding edges: 106479it [00:04, 25582.73it/s]Adding edges: 109056it [00:04, 25635.55it/s]Adding edges: 111651it [00:04, 25727.25it/s]Adding edges: 114241it [00:04, 25777.86it/s]Adding edges: 116831it [00:04, 25814.10it/s]Adding edges: 119413it [00:04, 25652.24it/s]Adding edges: 121979it [00:04, 25462.54it/s]Adding edges: 124526it [00:04, 25311.56it/s]Adding edges: 127058it [00:05, 25016.98it/s]Adding edges: 129583it [00:05, 25083.34it/s]Adding edges: 132093it [00:05, 25079.69it/s]Adding edges: 134602it [00:05, 25053.20it/s]Adding edges: 137108it [00:05, 24832.17it/s]Adding edges: 139628it [00:05, 24940.05it/s]Adding edges: 142138it [00:05, 24987.48it/s]Adding edges: 144645it [00:05, 25009.73it/s]Adding edges: 147151it [00:05, 25022.16it/s]Adding edges: 149657it [00:05, 25032.29it/s]Adding edges: 152211it [00:06, 25181.51it/s]Adding edges: 152564it [00:06, 25222.02it/s]
-[32m2026-02-20 14:07:24.031[0m | [1mINFO    [0m | [36martificial_intelligence_in_medicine.modeling._graphs_helpers[0m:[36minitialize_graph[0m:[36m309[0m - [1mSaved graph. Number of nodes: 152309, number of edges: 2948[0m
-[32m2026-02-20 14:07:24.956[0m | [1mINFO    [0m | [36m__main__[0m:[36mmain[0m:[36m43[0m - [1mLength of nodes: 152309[0m
-[32m2026-02-20 14:07:25.232[0m | [1mINFO    [0m | [36m__main__[0m:[36mmain[0m:[36m51[0m - [1mLength after removing low-degree nodes: 712[0m
-choreographer.browsers.chromium.ChromeNotFoundError
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/gpfs/projects/p32234/projects/aerith/artificial_intelligence_in_medicine/.venv/lib/python3.11/site-packages/plotly/io/_kaleido.py", line 380, in to_image
-    img_bytes = kaleido.calc_fig_sync(
-                ^^^^^^^^^^^^^^^^^^^^^^
-  File "/gpfs/projects/p32234/projects/aerith/artificial_intelligence_in_medicine/.venv/lib/python3.11/site-packages/kaleido/__init__.py", line 145, in calc_fig_sync
-    return _async_thread_run(calc_fig, args=args, kwargs=kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/gpfs/projects/p32234/projects/aerith/artificial_intelligence_in_medicine/.venv/lib/python3.11/site-packages/kaleido/__init__.py", line 138, in _async_thread_run
-    raise res
-  File "/gpfs/projects/p32234/projects/aerith/artificial_intelligence_in_medicine/.venv/lib/python3.11/site-packages/kaleido/__init__.py", line 129, in run
-    q.put(asyncio.run(func(*args, **kwargs)))
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ysc4337/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/asyncio/runners.py", line 190, in run
-    return runner.run(main)
-           ^^^^^^^^^^^^^^^^
-  File "/home/ysc4337/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ysc4337/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
-    return future.result()
-           ^^^^^^^^^^^^^^^
-  File "/gpfs/projects/p32234/projects/aerith/artificial_intelligence_in_medicine/.venv/lib/python3.11/site-packages/kaleido/__init__.py", line 54, in calc_fig
-    async with Kaleido(**kopts) as k:
-               ^^^^^^^^^^^^^^^^
-  File "/gpfs/projects/p32234/projects/aerith/artificial_intelligence_in_medicine/.venv/lib/python3.11/site-packages/kaleido/kaleido.py", line 128, in __init__
-    raise ChromeNotFoundError(
-choreographer.browsers.chromium.ChromeNotFoundError: Kaleido v1 and later requires Chrome to be installed. To install Chrome, use the CLI command `kaleido_get_chrome`, or from Python, use either `kaleido.get_chrome()` or `kaleido.get_chrome_sync()`.
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/gpfs/projects/p32234/projects/aerith/artificial_intelligence_in_medicine/artificial_intelligence_in_medicine/modeling/graphs.py", line 112, in <module>
-    main()
-  File "/gpfs/projects/p32234/projects/aerith/artificial_intelligence_in_medicine/artificial_intelligence_in_medicine/modeling/graphs.py", line 53, in main
-    fig.write_image(FIGURES_DIR / MODE / "aggregated_communities_citation.png")
-  File "/gpfs/projects/p32234/projects/aerith/artificial_intelligence_in_medicine/.venv/lib/python3.11/site-packages/plotly/basedatatypes.py", line 3895, in write_image
-    return pio.write_image(self, *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/gpfs/projects/p32234/projects/aerith/artificial_intelligence_in_medicine/.venv/lib/python3.11/site-packages/plotly/io/_kaleido.py", line 510, in write_image
-    img_data = to_image(
-               ^^^^^^^^^
-  File "/gpfs/projects/p32234/projects/aerith/artificial_intelligence_in_medicine/.venv/lib/python3.11/site-packages/plotly/io/_kaleido.py", line 392, in to_image
-    raise RuntimeError(PLOTLY_GET_CHROME_ERROR_MSG)
-RuntimeError: 
-
-Kaleido requires Google Chrome to be installed.
-
-Either download and install Chrome yourself following Google's instructions for your operating system,
-or install it from your terminal by running:
-
-    $ plotly_get_chrome
-
-
