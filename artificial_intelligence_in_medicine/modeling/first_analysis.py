@@ -60,15 +60,6 @@ def generate_cluster_graph(G_ig, MODE):
     output_dir = FIGURES_DIR / MODE
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    for i, community in enumerate(communities):
-        lines = [f"Community {i}\n"]
-        lines.extend(f"\t{all_titles[v]}---{all_names[v]}\n" for v in community)
-        with open(output_dir / f"community_list_{i:05d}.txt", "w") as f:
-            f.writelines(lines)
-        G_ig.vs[community]["color"] = i
-        community_edges = G_ig.es.select(_within=community)
-        community_edges["color"] = i
-
     # Calculate layout once — fr spreads nodes to minimize overlap
     layout = G_ig.layout_fruchterman_reingold()
 
@@ -80,7 +71,7 @@ def generate_cluster_graph(G_ig, MODE):
         mark_groups=True,
         palette=palette1,
         vertex_size=2,
-        edge_width=0.5,
+        edge_width=0.1,
     )
     fig1.set_size_inches(20, 20)
     fig1.savefig(output_dir / "community_leiden_clustergraph.png", dpi=800)
