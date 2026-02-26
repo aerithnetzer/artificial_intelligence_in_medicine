@@ -278,32 +278,38 @@ def main():
 
         import math
 
-        cmap = plt.get_cmap("Set2")
-        colors_meta = [cmap(i) for i in range(len(bin_labels_meta))]
-        node_colors_meta = [colors_meta[node_bins_meta[i]] for i in range(G_comm.vcount())]
+    cmap = plt.get_cmap("Set2")
+    colors_meta = [cmap(i) for i in range(len(bin_labels_meta))]
+    node_colors_meta = [colors_meta[node_bins_meta[i]] for i in range(G_comm.vcount())]
+    vertex_sizes = [3 + 1.5 * math.log1p(n) for n in G_comm.vs["num_members"]]
+    layout_comm = G_comm.layout("drl")
 
-        vertex_sizes = [3 + 1.5 * math.log1p(n) for n in G_comm.vs["num_members"]]
-        layout_comm = G_comm.layout("drl")
+    fig, ax = plt.subplots(figsize=(20, 16))
+    ig.plot(
+        G_comm,
+        target=ax,
+        layout=layout_comm,
+        vertex_size=vertex_sizes,
+        vertex_color=node_colors_meta,
+        edge_width=[0.3 + 0.8 * math.log1p(w) for w in G_comm.es["weight"]],
+    )
 
-        fig, ax = plt.subplots(figsize=(20, 16))
-        ig.plot(
-            G_comm,
-            target=ax,
-            layout=layout_comm,
-            vertex_size=vertex_sizes,
-            vertex_color=node_colors_meta,
-            edge_width=[0.3 + 0.8 * math.log1p(w) for w in G_comm.es["weight"]],
-        )
-        ax.autoscale()
-        ax.set_aspect("equal")
+    # Expand axis limits by 10% padding so the graph fills the canvas
+    coords = layout_comm.coords
+    xs = [c[0] for c in coords]
+    ys = [c[1] for c in coords]
+    x_pad = (max(xs) - min(xs)) * 0.1
+    y_pad = (max(ys) - min(ys)) * 0.1
+    ax.set_xlim(min(xs) - x_pad, max(xs) + x_pad)
+    ax.set_ylim(min(ys) - y_pad, max(ys) + y_pad)
+    ax.set_aspect("equal", adjustable="datalim")
 
-        plt.title("Community Meta-Graph (Constraint Binned)")
-        plt.legend(handles=legend_patches, title="Constraint", loc="best")
-        plt.tight_layout()
-        plt.savefig(figures_path / "community_metagraph.svg")
-        plt.close()
-
-        logger.success(f"Finished mode: {MODE}")
+    plt.title("Community Meta-Graph (Constraint Binned)")
+    plt.legend(handles=legend_patches, title="Constraint", loc="best")
+    plt.tight_layout()
+    plt.savefig(figures_path / "community_metagraph.svg")
+    plt.close()
+    logger.success(f"Finished mode: {MODE}")
 
 
 if __name__ == "__main__":
