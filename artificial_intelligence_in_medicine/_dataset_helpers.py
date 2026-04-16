@@ -1,26 +1,26 @@
+import ast
 import glob
 import json
 import os
 from pathlib import Path
+
+from elasticsearch import Elasticsearch
 from loguru import logger
 import requests
 from tqdm import tqdm
-import typer
+
 from artificial_intelligence_in_medicine.config import INTERIM_DATA_DIR
-import ast
-from elasticsearch import Elasticsearch
 
 icite_baseurl = "https://icite.od.nih.gov/api/pubs?pmids="
 
 
 def get_first_author_affiliation(authors):
-    print(authors)
+    """Extract first author's affiliation from author list."""
     if isinstance(authors, str):
         try:
             authors = json.loads(authors)
         except json.JSONDecodeError:
             authors = ast.literal_eval(authors)
-            print(authors)
             first_author = authors[0] if isinstance(authors, list) else authors
             if len(authors) == 0:
                 return None
@@ -228,13 +228,11 @@ def get_institution_coordinates(mode: str = "ARTIFICIAL_INTELLIGENCE"):
     input_path: Path = INTERIM_DATA_DIR / mode / "dataset_with_affiliations.parquet"
     output_path: Path = INTERIM_DATA_DIR / mode / "features_with_ror.parquet"
     import pandas as pd
-    from elasticsearch import Elasticsearch
 
-    es = Elasticsearch("http://localhost:9200", verify_certs=False)  # change if using remote
     # ---- REPLACE THIS WITH YOUR OWN CODE ----
     logger.info("Generating features from dataset...")
     df = pd.read_parquet(input_path)
-    print(len(df))
+    logger.info(f"Loaded {len(df)} records")
 
     def get_ror_data(affiliation):
         print(affiliation)
@@ -361,7 +359,6 @@ def citation_data(input_path: str, output_path: str):
                         for grant in article_info.get("GrantList", [])
                         if grant.get("Agency")
                     ]
-                    print(grant_list)
                     affiliation = (
                         author_list[0].get("AffiliationInfo", [{}])[0].get("Affiliation")
                         if author_list and author_list[0].get("AffiliationInfo")

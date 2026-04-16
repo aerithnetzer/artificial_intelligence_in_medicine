@@ -1,4 +1,3 @@
-import json
 import os
 from pathlib import Path
 
@@ -9,17 +8,13 @@ from loguru import logger
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-import plotly.express as px
 import seaborn as sns
-from tqdm import tqdm
 import typer
 
 from artificial_intelligence_in_medicine.config import (
     FIGURES_DIR,
     INTERIM_DATA_DIR,
-    PROCESSED_DATA_DIR,
 )
 
 app = typer.Typer()

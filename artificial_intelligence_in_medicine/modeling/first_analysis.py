@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from _graphs_helpers import initialize_graph
 from artificial_intelligence_in_medicine.config import FIGURES_DIR, RESULTS_DATA_DIR
+from artificial_intelligence_in_medicine.modeling._graphs_helpers import initialize_graph
 
 MODES = ["ARTIFICIAL_INTELLIGENCE", "GENE_EXPRESSION", "NULL"]
 

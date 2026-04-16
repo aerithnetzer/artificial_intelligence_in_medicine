@@ -1,9 +1,10 @@
-import requests
+import os
 import random
 import time
+
 import pandas as pd
+import requests
 from tqdm import tqdm
-import os
 
 ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 ESUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"

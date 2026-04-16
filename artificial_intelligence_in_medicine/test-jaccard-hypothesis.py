@@ -5,12 +5,14 @@ Compare average Jaccard distance between source articles' MeSH terms and those
 of their citing articles vs year-matched random controls, across multiple fields.
 """
 
-import pandas as pd
-import numpy as np
 import ast
-from scipy.stats import wilcoxon
+
 from matplotlib import pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy.stats import wilcoxon
 import seaborn as sns
+
 from artificial_intelligence_in_medicine.config import INTERIM_DATA_DIR
 
 

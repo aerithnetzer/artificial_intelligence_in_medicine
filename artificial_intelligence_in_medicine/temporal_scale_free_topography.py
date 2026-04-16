@@ -1,21 +1,20 @@
-import json
-import pickle
 from collections import defaultdict
 from pathlib import Path
+import pickle
 
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import igraph as ig
+from loguru import logger
 import matplotlib.animation as animation
-import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
-import seaborn as sns
-from loguru import logger
 from scipy.stats import spearmanr
+import seaborn as sns
 import typer
 
 from artificial_intelligence_in_medicine.config import (
@@ -25,8 +24,6 @@ from artificial_intelligence_in_medicine.config import (
 )
 
 app = typer.Typer()
-
-MODE = "ARTIFICIAL_INTELLIGENCE"
 
 
 def get_node_locations(features_path):
@@ -334,23 +331,21 @@ def create_kde_heatmap_by_year(graph, location_map, pa_scores, output_path):
 
 @app.command()
 def main(
-    graph_path: Path = MODELS_DIR / MODE / "citation_model.pkl",
-    features_path: Path = INTERIM_DATA_DIR / MODE / "features_with_ror.json",
-    output_path: Path = FIGURES_DIR / MODE / "geographic_preferential_attachment_kde.gif",
+    mode: str = typer.Option(
+        "ARTIFICIAL_INTELLIGENCE", help="Mode: ARTIFICIAL_INTELLIGENCE, GENE_EXPRESSION, or NULL"
+    ),
+    graph_path: Path = typer.Option(None, help="Path to citation graph pickle"),
+    features_path: Path = typer.Option(None, help="Path to features_with_ror.json"),
+    output_path: Path = typer.Option(None, help="Output path for animation"),
 ):
     """
     Generate animated KDE heatmap showing preferential attachment scores by location.
-
-    Parameters
-    ----------
-    graph_path : Path
-        Path to pickled citation network graph
-    features_path : Path
-        Path to JSON file with node locations
-    output_path : Path
-        Output path for animation (use .gif or .mp4)
     """
-    if MODE == "ARTIFICIAL_INTELLIGENCE":
+    graph_path = graph_path or MODELS_DIR / mode / "citation_model.pkl"
+    features_path = features_path or INTERIM_DATA_DIR / mode / "features_with_ror.json"
+    output_path = output_path or FIGURES_DIR / mode / "geographic_preferential_attachment_kde.gif"
+
+    if mode == "ARTIFICIAL_INTELLIGENCE":
         min_degree = 25
     else:
         min_degree = 23

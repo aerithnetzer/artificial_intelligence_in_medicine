@@ -1,15 +1,13 @@
-import ast
 import json
 import os
 from pathlib import Path
 
 from Bio import Entrez
-from elasticsearch import Elasticsearch
 from loguru import logger
 from tqdm import tqdm
 import typer
 
-from _dataset_helpers import (
+from artificial_intelligence_in_medicine._dataset_helpers import (
     citation_data,
     flatten_data_to_parquet,
     get_affiliation_coordinate_data,
@@ -31,41 +29,18 @@ app = typer.Typer()
 Entrez.email = os.getenv("NCBI_EMAIL")
 Entrez.api_key = os.getenv("NCBI_API_KEY")
 
-icite_baseurl = "https://icite.od.nih.gov/api/pubs?pmids="
-MODE = "NULL"
 batch_size = 10_000
-
-es = Elasticsearch("http://localhost:9200", verify_certs=False)  # change if using remote
-
-
-def get_first_author_affiliation(authors):
-    print(authors)
-    if isinstance(authors, str):
-        try:
-            authors = json.loads(authors)
-        except json.JSONDecodeError:
-            authors = ast.literal_eval(authors)
-            print(authors)
-            first_author = authors[0] if isinstance(authors, list) else authors
-            if len(authors) == 0:
-                return None
-            else:
-                if len(first_author["AffiliationInfo"]) != 0:
-                    return first_author["AffiliationInfo"][0]["Affiliation"]
-
-
-def chunker(seq, size):
-    """Yield successive n-sized chunks from seq."""
-    return (seq[pos : pos + size] for pos in range(0, len(seq), size))
 
 
 @app.command()
 def main(
     MODE: str = "ARTIFICIAL_INTELLIGENCE",
-    input_path: Path = RAW_DATA_DIR / MODE / "pmids.txt",
-    output_path: Path = INTERIM_DATA_DIR / MODE,
+    input_path: Path = typer.Option(None, help="Override input PMIDs path"),
+    output_path: Path = typer.Option(None, help="Override output directory"),
 ):
     logger.info("Processing dataset...")
+    input_path = input_path or RAW_DATA_DIR / MODE / "pmids.txt"
+    output_path = output_path or INTERIM_DATA_DIR / MODE
     with open(input_path, "r") as file:  # Load PMIDS from text file
         pmids = file.read().splitlines()
 

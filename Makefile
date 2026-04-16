@@ -40,9 +40,10 @@ format:
 
 .PHONY: clean_figures
 clean_figures:
-	rm -rf reports/figures/gene_expression/*
-	rm -rf reports/figures/artificial_intelligence/*
-	rm -rf reports/figures/null/*
+	rm -rf reports/figures/GENE_EXPRESSION/*
+	rm -rf reports/figures/ARTIFICIAL_INTELLIGENCE/*
+	rm -rf reports/figures/NULL/*
+	rm -rf reports/figures/comparative/*
 
 ## Set up Python interpreter environment
 .PHONY: create_environment
@@ -61,6 +62,36 @@ create_environment:
 .PHONY: data
 data: requirements
 	uv run artificial_intelligence_in_medicine/dataset.py
+
+## Generate all visualizations (per-mode + comparative)
+.PHONY: visualizations
+visualizations: requirements
+	uv run python -m artificial_intelligence_in_medicine.generate_all all
+
+## Generate only comparative (cross-field) visualizations
+.PHONY: comparative
+comparative: requirements
+	uv run python -m artificial_intelligence_in_medicine.generate_all comparative
+
+## Generate temporal visualizations only
+.PHONY: temporal
+temporal: requirements
+	uv run python -m artificial_intelligence_in_medicine.generate_all temporal
+
+## Generate geographic visualizations only
+.PHONY: geographic
+geographic: requirements
+	uv run python -m artificial_intelligence_in_medicine.generate_all geographic
+
+## Generate funding visualizations only
+.PHONY: funding
+funding: requirements
+	uv run python -m artificial_intelligence_in_medicine.generate_all funding
+
+## Run graph analysis pipeline
+.PHONY: graphs
+graphs: requirements
+	uv run python -m artificial_intelligence_in_medicine.modeling.graphs
 
 
 #################################################################################

@@ -12,9 +12,6 @@ from scipy.stats import kstest
 
 from artificial_intelligence_in_medicine.config import MODELS_DIR
 
-MODE = "GENE_EXPRESSION"
-print(f"Calculating temporal dynamics for {MODE}")
-
 
 def analyze_scale_free_by_year_ks(graph_path):
     """
@@ -273,30 +270,42 @@ def analyze_scale_free_characteristics(graph_path: str | Path) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
-results = analyze_scale_free_by_year_ks(MODELS_DIR / MODE / "citation_model.pkl")
+def main(mode: str = "GENE_EXPRESSION"):
+    """Run all temporal dynamics analyses for a given mode."""
+    graph_path = MODELS_DIR / mode / "citation_model.pkl"
 
-for year, metrics in results.items():
-    print(
-        f"{year:.0f}: α={metrics['alpha']:.2f}, KS={metrics['ks_stat']:.3f}, p={metrics['p_value']:.3f}, normalized={metrics['normalized_score']:.5f}"
-    )
+    results = analyze_scale_free_by_year_ks(graph_path)
+    for year, metrics in results.items():
+        print(
+            f"{year:.0f}: alpha={metrics['alpha']:.2f}, KS={metrics['ks_stat']:.3f}, "
+            f"p={metrics['p_value']:.3f}, normalized={metrics['normalized_score']:.5f}"
+        )
 
-df_scale_free = analyze_scale_free_characteristics(MODELS_DIR / MODE / "citation_model.pkl")
-print(df_scale_free)
-df_valid = df_scale_free.dropna(subset=["alpha"])
-plt.figure(figsize=(10, 6))
-plt.plot(df_valid["year"], df_valid["alpha"], marker="o")
-plt.title("Power-law Exponent (α) Over Time")
-plt.xlabel("Year")
-plt.ylabel("Alpha (α)")
-plt.grid(True)
-results = analyze_scale_free_by_year(MODELS_DIR / MODE / "citation_model.pkl")
-for year, score in results.items():
-    print(f"{year}: {score:.4f}")
-years = [y for y in results if not np.isnan(y)]
-scores = [results[y] for y in years]
+    df_scale_free = analyze_scale_free_characteristics(graph_path)
+    print(df_scale_free)
+    df_valid = df_scale_free.dropna(subset=["alpha"])
+    plt.figure(figsize=(10, 6))
+    plt.plot(df_valid["year"], df_valid["alpha"], marker="o")
+    plt.title(f"Power-law Exponent (alpha) Over Time ({mode})")
+    plt.xlabel("Year")
+    plt.ylabel("Alpha")
+    plt.grid(True)
 
-plt.plot(years, scores, marker="o")
-plt.xlabel("Year")
-plt.ylabel("Normalized Scale-Free Score (α / N)")
-plt.title("Scale-Free Structure Over Time")
-plt.show()
+    results_norm = analyze_scale_free_by_year(graph_path)
+    for year, score in results_norm.items():
+        print(f"{year}: {score:.4f}")
+    years = [y for y in results_norm if not np.isnan(y)]
+    scores = [results_norm[y] for y in years]
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(years, scores, marker="o")
+    plt.xlabel("Year")
+    plt.ylabel("Normalized Scale-Free Score (alpha / N)")
+    plt.title(f"Scale-Free Structure Over Time ({mode})")
+    plt.show()
+
+
+if __name__ == "__main__":
+    import typer
+
+    typer.run(main)

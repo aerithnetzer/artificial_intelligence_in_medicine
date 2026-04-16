@@ -1,22 +1,20 @@
 from pathlib import Path
 import pickle
-from typing import Any, Counter
-import numpy as np
+
 from loguru import logger
 import networkx as nx
 from networkx.algorithms.community import greedy_modularity_communities
 from networkx.algorithms.structuralholes import constraint
-from networkx.classes import Graph
+import numpy as np
 import pandas as pd
+from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
-import typer
-import matplotlib.pyplot as plt
+
 from artificial_intelligence_in_medicine.config import (
     FIGURES_DIR,
     INTERIM_DATA_DIR,
     MODELS_DIR,
 )
-from sentence_transformers import SentenceTransformer
 
 
 def load_graph(graph_path):
@@ -51,8 +49,9 @@ def plot_normalized_constraints_over_time(G, constraints, MODE):
     fig : plotly.graph_objects.Figure
         Interactive violin plot
     """
-    import plotly.graph_objects as go
     from collections import defaultdict
+
+    import plotly.graph_objects as go
 
     # Collect constraint values by year
     year_to_constraints = defaultdict(list)
@@ -126,8 +125,8 @@ def plot_constraints_over_time(G, constraints, MODE):
     # Extract year and constraint data for nodes in the graph
     year_constraint_data = {}
 
-    import plotly.graph_objects as go
     import numpy as np
+    import plotly.graph_objects as go
 
     for node in G.nodes():
         if node in constraints:
@@ -151,7 +150,7 @@ def plot_constraints_over_time(G, constraints, MODE):
             x=years,
             y=medians,
             mode="lines+markers",
-            name=f"Median Constraint",
+            name="Median Constraint",
             line=dict(width=2, color="#1f77b4"),
             marker=dict(size=8, color="#1f77b4"),
             hovertemplate="<b>Year:</b> %{x}<br>"
@@ -208,6 +207,7 @@ def print_top_community_attributes(graph: nx.Graph, community_brokerage):
 
 def assign_community_labels(MODE, G):
     from collections import defaultdict
+
     from sklearn.feature_extraction.text import TfidfVectorizer
 
     communities = nx.get_node_attributes(G, "community")
@@ -350,15 +350,7 @@ def find_central_nodes(mode: str = "ARTIFICIAL_INTELLIGENCE"):
 
 
 def community_detection(mode: str, G: nx.Graph | Path, inflection_point: int) -> nx.Graph:
-    from collections import defaultdict
-    from pathlib import Path
-    import pickle
-
     import networkx as nx
-    import numpy as np
-    import plotly.express as px
-    import plotly.graph_objects as go
-    from sklearn.feature_extraction.text import TfidfVectorizer
 
     g = G
     original_node_count = g.number_of_nodes()
@@ -407,7 +399,6 @@ def community_detection(mode: str, G: nx.Graph | Path, inflection_point: int) ->
             modularity_score = 0.0
     else:
         communities = {n: i for i, n in enumerate(g.nodes())}
-        modularity_score = 0.0
     # Assign community membership
     nx.set_node_attributes(g, communities, "community")
     return g
@@ -418,7 +409,6 @@ def community_detection(mode: str, G: nx.Graph | Path, inflection_point: int) ->
 def calculate_inflection_point(G: nx.Graph, MODE: str) -> int:
     import numpy as np
 
-    mode = MODE
     degrees_raw = [val for (_, val) in G.degree()]
     processed_degrees = []
     for item in degrees_raw:
@@ -459,51 +449,15 @@ def calculate_inflection_point(G: nx.Graph, MODE: str) -> int:
 def assign_countries_from_latlon(G):
     """
     Adds a 'country' attribute to each node using matched_lat/matched_lon.
-    Uses Natural Earth (offline, reproducible).
-    """
-    import geopandas as gpd
-    from shapely.geometry import Point
-
-    # Load world country polygons
-    world = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
-    world = world[["name", "geometry"]].rename(columns={"name": "country"})
-
-    # Build GeoDataFrame of nodes
-    rows = []
-    for node, data in G.nodes(data=True):
-        lat = data.get("matched_lat")
-        lon = data.get("matched_lon")
-        if lat is not None and lon is not None:
-            rows.append(
-                {
-                    "node": node,
-                    "geometry": Point(lon, lat),
-                }
-            )
-
-    nodes_gdf = gpd.GeoDataFrame(rows, crs="EPSG:4326")
-
-    # Spatial join
-    joined = gpd.sjoin(nodes_gdf, world, how="left", predicate="within")
-
-    # Attach country back to graph
-    country_map = dict(zip(joined["node"], joined["country"]))
-    nx.set_node_attributes(G, country_map, "country")
-
-    return G
-
-
-def assign_countries_from_latlon(G):
-    """
-    Adds a 'country' attribute to each node using matched_lat/matched_lon.
     Compatible with GeoPandas >= 1.0.
     """
+    from pathlib import Path
+    import urllib.request
+    import zipfile
+
     import geopandas as gpd
     import networkx as nx
     from shapely.geometry import Point
-    from pathlib import Path
-    import zipfile
-    import urllib.request
 
     # Where to cache Natural Earth
     data_dir = Path.home() / ".cache" / "natural_earth"
@@ -564,8 +518,9 @@ def plot_constraints_by_community(G, constraints, MODE, min_articles=5):
     MODE : str
         Mode name for labeling
     """
-    import plotly.graph_objects as go
     from collections import defaultdict
+
+    import plotly.graph_objects as go
 
     community_constraints = defaultdict(list)
 
@@ -630,8 +585,9 @@ def plot_constraints_by_country(G, constraints, MODE, min_articles=20):
     min_articles : int
         Minimum number of articles required to include a country
     """
-    import plotly.graph_objects as go
     from collections import defaultdict
+
+    import plotly.graph_objects as go
 
     country_constraints = defaultdict(list)
 
