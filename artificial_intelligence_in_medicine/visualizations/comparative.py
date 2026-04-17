@@ -17,8 +17,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from scipy import stats as sp_stats
+
 from artificial_intelligence_in_medicine.visualizations.utils import (
     MODE_COLORS,
+    MODE_COLORS_LIGHT,
     MODE_LABELS,
     MODES,
     add_citation_count_column,
@@ -1360,3 +1363,324 @@ def comparative_graph_statistics():
     logger.info(f"Saved graph statistics CSV to {csv_path}")
 
     return df
+
+
+# =========================================================================
+# STREAM 1: MeSH TOPIC EVOLUTION
+# =========================================================================
+
+
+def _extract_mesh_terms(mesh_headings) -> list[str]:
+    """
+    Extract flat list of MeSH descriptor names from the mesh_headings field.
+    Handles both list-of-dicts (with 'DescriptorName' key) and list-of-strings.
+    """
+    if not isinstance(mesh_headings, list):
+        return []
+    terms = []
+    for item in mesh_headings:
+        if isinstance(item, dict):
+            name = item.get("DescriptorName", "")
+            if isinstance(name, str) and name:
+                terms.append(name)
+        elif isinstance(item, str) and item:
+            terms.append(item)
+    return terms
+
+
+def comparative_mesh_entropy_over_time():
+    """
+    Shannon entropy of MeSH term frequency distribution per year, overlaid
+    for all 3 fields.
+
+    Higher entropy = more diverse research topics in that year.
+    Shows whether AI-in-medicine is broadening its topical scope compared
+    to the mature Gene Expression field.
+    """
+    logger.info("Generating comparative MeSH entropy over time...")
+    out = ensure_comparative_dir()
+    fig = go.Figure()
+
+    for mode in MODES:
+        df = load_features(mode)
+        df = clean_year_column(df)
+
+        # Flatten MeSH headings per article
+        df["_mesh_flat"] = df["mesh_headings"].apply(_extract_mesh_terms)
+
+        entropy_by_year = {}
+        for year, group in df.groupby("year"):
+            all_terms = []
+            for terms in group["_mesh_flat"]:
+                all_terms.extend(terms)
+            if not all_terms:
+                continue
+            # Frequency distribution
+            term_counts = pd.Series(all_terms).value_counts(normalize=True)
+            # Shannon entropy: H = -sum(p * log2(p))
+            entropy = float(-(term_counts * np.log2(term_counts)).sum())
+            entropy_by_year[year] = entropy
+
+        if not entropy_by_year:
+            continue
+
+        years = sorted(entropy_by_year.keys())
+        entropies = [entropy_by_year[y] for y in years]
+
+        fig.add_trace(
+            go.Scatter(
+                x=years,
+                y=entropies,
+                mode="lines+markers",
+                name=MODE_LABELS[mode],
+                line=dict(color=MODE_COLORS[mode], width=2),
+            )
+        )
+
+    fig.update_layout(
+        title="MeSH Topic Diversity Over Time (Shannon Entropy)",
+        xaxis_title="Year",
+        yaxis_title="Shannon Entropy (bits)",
+        width=1100,
+        height=700,
+        template="plotly_white",
+    )
+
+    save_plot(fig, out / "comparative_mesh_entropy")
+
+
+def comparative_mesh_composition_shifts():
+    """
+    Stacked area chart showing proportion of top-10 MeSH terms over time
+    for each field. Reveals dominant topic transitions (e.g., the shift from
+    'Neural Networks' to 'Deep Learning').
+
+    Produces one subplot per field (3 rows).
+    """
+    logger.info("Generating comparative MeSH composition shifts...")
+    out = ensure_comparative_dir()
+
+    fig = make_subplots(
+        rows=3,
+        cols=1,
+        subplot_titles=[MODE_LABELS[m] for m in MODES],
+        vertical_spacing=0.08,
+    )
+
+    for row, mode in enumerate(MODES, 1):
+        df = load_features(mode)
+        df = clean_year_column(df)
+        df["_mesh_flat"] = df["mesh_headings"].apply(_extract_mesh_terms)
+
+        # Find overall top 10 MeSH terms for this mode
+        all_terms = []
+        for terms in df["_mesh_flat"]:
+            all_terms.extend(terms)
+        top_terms = pd.Series(all_terms).value_counts().head(10).index.tolist()
+
+        # Compute yearly proportions for top terms
+        year_range = sorted(df["year"].unique())
+        term_proportions = {term: [] for term in top_terms}
+        for year in year_range:
+            year_terms = []
+            for terms in df[df["year"] == year]["_mesh_flat"]:
+                year_terms.extend(terms)
+            total = len(year_terms) if year_terms else 1
+            for term in top_terms:
+                count = sum(1 for t in year_terms if t == term)
+                term_proportions[term].append(count / total)
+
+        for term in top_terms:
+            fig.add_trace(
+                go.Scatter(
+                    x=year_range,
+                    y=term_proportions[term],
+                    mode="lines",
+                    name=term if row == 1 else None,
+                    stackgroup="one",
+                    showlegend=(row == 1),
+                    legendgroup=term,
+                ),
+                row=row,
+                col=1,
+            )
+
+    fig.update_layout(
+        title_text="MeSH Term Composition Over Time (Top 10 Terms per Field)",
+        width=1200,
+        height=1200,
+        template="plotly_white",
+    )
+    fig.update_yaxes(title_text="Proportion", row=2, col=1)
+
+    save_plot(fig, out / "comparative_mesh_composition", width=1200, height=1200)
+
+
+# =========================================================================
+# STREAM 2: INSTITUTION-LEVEL ANALYSIS
+# =========================================================================
+
+
+def comparative_top_institutions():
+    """
+    Grouped horizontal bar chart: top-15 institutions by article count
+    across all 3 fields. Uses matched_name from ROR matching.
+    """
+    logger.info("Generating comparative top institutions...")
+    out = ensure_comparative_dir()
+
+    all_data = []
+    for mode in MODES:
+        df = load_features(mode)
+        df = df.dropna(subset=["matched_name"])
+        counts = df["matched_name"].value_counts()
+        for inst, count in counts.items():
+            all_data.append({"institution": inst, "count": count, "field": MODE_LABELS[mode]})
+
+    df_all = pd.DataFrame(all_data)
+    if df_all.empty:
+        logger.warning("No institution data available.")
+        return
+
+    # Top 15 institutions by total count
+    total_by_inst = df_all.groupby("institution")["count"].sum().nlargest(15).index
+    df_top = df_all[df_all["institution"].isin(total_by_inst)]
+    inst_order = (
+        df_top.groupby("institution")["count"].sum().sort_values(ascending=True).index.tolist()
+    )
+
+    fig = px.bar(
+        df_top,
+        x="count",
+        y="institution",
+        color="field",
+        orientation="h",
+        barmode="group",
+        category_orders={"institution": inst_order},
+        color_discrete_map={MODE_LABELS[m]: MODE_COLORS[m] for m in MODES},
+        title="Top 15 Institutions by Publication Count",
+        labels={"count": "Number of Publications", "institution": "Institution"},
+    )
+    fig.update_layout(width=1200, height=800, template="plotly_white")
+
+    save_plot(fig, out / "comparative_top_institutions", width=1200, height=800)
+
+
+def comparative_institutional_concentration():
+    """
+    Gini coefficient of institution publication counts per year, overlaid
+    for all 3 fields. Higher Gini = more concentrated in fewer institutions.
+
+    Shows whether AI research is becoming more or less institutionally
+    concentrated over time.
+    """
+    logger.info("Generating comparative institutional concentration...")
+    out = ensure_comparative_dir()
+    fig = go.Figure()
+
+    def _gini(values):
+        """Compute Gini coefficient for a 1D array of non-negative values."""
+        v = np.sort(np.asarray(values, dtype=float))
+        n = len(v)
+        if n < 2 or v.sum() == 0:
+            return np.nan
+        index = np.arange(1, n + 1)
+        return float((2 * (index * v).sum()) / (n * v.sum()) - (n + 1) / n)
+
+    for mode in MODES:
+        df = load_features(mode)
+        df = clean_year_column(df)
+        df = df.dropna(subset=["matched_name"])
+
+        gini_by_year = {}
+        for year, group in df.groupby("year"):
+            inst_counts = group["matched_name"].value_counts().values
+            if len(inst_counts) < 5:
+                continue
+            gini_by_year[year] = _gini(inst_counts)
+
+        if not gini_by_year:
+            continue
+
+        years = sorted(gini_by_year.keys())
+        ginis = [gini_by_year[y] for y in years]
+
+        fig.add_trace(
+            go.Scatter(
+                x=years,
+                y=ginis,
+                mode="lines+markers",
+                name=MODE_LABELS[mode],
+                line=dict(color=MODE_COLORS[mode], width=2),
+            )
+        )
+
+    fig.update_layout(
+        title="Institutional Concentration Over Time (Gini Coefficient)",
+        xaxis_title="Year",
+        yaxis_title="Gini Coefficient",
+        yaxis_range=[0, 1],
+        width=1100,
+        height=700,
+        template="plotly_white",
+    )
+
+    save_plot(fig, out / "comparative_institutional_concentration")
+
+
+# =========================================================================
+# STREAM 4: GEOGRAPHIC CONCENTRATION
+# =========================================================================
+
+
+def comparative_geographic_concentration():
+    """
+    Herfindahl-Hirschman Index (HHI) of country-level publication shares
+    per year, overlaid for all 3 fields.
+
+    Lower HHI = more geographically dispersed research output.
+    """
+    logger.info("Generating comparative geographic concentration (HHI)...")
+    out = ensure_comparative_dir()
+    fig = go.Figure()
+
+    for mode in MODES:
+        df = load_features(mode)
+        df = clean_year_column(df)
+        df = df.dropna(subset=["matched_country"])
+
+        hhi_by_year = {}
+        for year, group in df.groupby("year"):
+            counts = group["matched_country"].value_counts()
+            total = counts.sum()
+            if total < 10:
+                continue
+            shares = counts / total
+            hhi_by_year[year] = float((shares**2).sum())
+
+        if not hhi_by_year:
+            continue
+
+        years = sorted(hhi_by_year.keys())
+        hhis = [hhi_by_year[y] for y in years]
+
+        fig.add_trace(
+            go.Scatter(
+                x=years,
+                y=hhis,
+                mode="lines+markers",
+                name=MODE_LABELS[mode],
+                line=dict(color=MODE_COLORS[mode], width=2),
+            )
+        )
+
+    fig.update_layout(
+        title="Geographic Concentration Over Time (Herfindahl-Hirschman Index)",
+        xaxis_title="Year",
+        yaxis_title="HHI (lower = more dispersed)",
+        width=1100,
+        height=700,
+        template="plotly_white",
+    )
+
+    save_plot(fig, out / "comparative_geographic_concentration")

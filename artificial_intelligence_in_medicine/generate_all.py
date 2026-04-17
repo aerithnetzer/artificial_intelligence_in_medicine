@@ -11,6 +11,7 @@ Usage:
     uv run python -m artificial_intelligence_in_medicine.generate_all funding
     uv run python -m artificial_intelligence_in_medicine.generate_all comparative
     uv run python -m artificial_intelligence_in_medicine.generate_all per-mode --mode ARTIFICIAL_INTELLIGENCE
+    uv run python -m artificial_intelligence_in_medicine.generate_all statistics
 """
 
 from loguru import logger
@@ -38,10 +39,20 @@ def _run_per_mode_temporal(mode: str):
 def _run_per_mode_geographic(mode: str):
     from artificial_intelligence_in_medicine.visualizations.geographic import (
         plot_cartographic_density,
+        plot_geographic_kde_by_year,
+        plot_lat_lon_scatter,
     )
 
     logger.info(f"[{mode}] Generating geographic visualizations...")
     plot_cartographic_density(mode)
+    try:
+        plot_geographic_kde_by_year(mode)
+    except Exception as e:
+        logger.warning(f"[{mode}] Could not generate KDE by year: {e}")
+    try:
+        plot_lat_lon_scatter(mode)
+    except Exception as e:
+        logger.warning(f"[{mode}] Could not generate lat/lon scatter: {e}")
 
 
 def _run_per_mode_funding(mode: str):
@@ -91,6 +102,7 @@ def _run_comparative_temporal():
 def _run_comparative_geographic():
     from artificial_intelligence_in_medicine.visualizations.comparative import (
         comparative_country_bars,
+        comparative_geographic_concentration,
         comparative_geographic_density,
         country_temporal_growth,
         geographic_constraint_map,
@@ -103,6 +115,7 @@ def _run_comparative_geographic():
     country_temporal_growth()
     geographic_constraint_map()
     regional_constraint_heatmap()
+    comparative_geographic_concentration()
 
 
 def _run_comparative_funding():
@@ -120,6 +133,28 @@ def _run_comparative_funding():
     funding_vs_constraint()
     funding_geography_heatmap()
     multi_agency_constraint()
+
+
+def _run_comparative_mesh():
+    from artificial_intelligence_in_medicine.visualizations.comparative import (
+        comparative_mesh_composition_shifts,
+        comparative_mesh_entropy_over_time,
+    )
+
+    logger.info("Generating comparative MeSH topic evolution visualizations...")
+    comparative_mesh_entropy_over_time()
+    comparative_mesh_composition_shifts()
+
+
+def _run_comparative_institutions():
+    from artificial_intelligence_in_medicine.visualizations.comparative import (
+        comparative_institutional_concentration,
+        comparative_top_institutions,
+    )
+
+    logger.info("Generating comparative institution visualizations...")
+    comparative_top_institutions()
+    comparative_institutional_concentration()
 
 
 def _run_comparative_summary():
@@ -152,6 +187,19 @@ def _run_graph_visualizations():
         comparative_graph_statistics()
     except Exception as e:
         logger.warning(f"Could not generate comparative graph statistics: {e}")
+
+
+def _run_statistical_tests():
+    from artificial_intelligence_in_medicine.visualizations.statistical import (
+        run_all_statistical_tests,
+    )
+
+    logger.info("Running all statistical hypothesis tests...")
+    try:
+        results = run_all_statistical_tests()
+        logger.success(f"Statistical tests complete. {len(results)} test suites run.")
+    except Exception as e:
+        logger.warning(f"Could not run statistical tests: {e}")
 
 
 # -----------------------------------------------------------------------
@@ -205,6 +253,8 @@ def comparative():
     _run_comparative_temporal()
     _run_comparative_geographic()
     _run_comparative_funding()
+    _run_comparative_mesh()
+    _run_comparative_institutions()
     _run_comparative_summary()
     _run_graph_visualizations()
     logger.success("All comparative visualizations complete.")
@@ -218,8 +268,39 @@ def graphs():
 
 
 @app.command()
+def statistics():
+    """Run all statistical hypothesis tests (funding, cross-field, geographic)."""
+    _run_statistical_tests()
+
+    from artificial_intelligence_in_medicine.visualizations.statistical import (
+        compare_mode_correlations,
+    )
+
+    try:
+        compare_mode_correlations()
+    except Exception as e:
+        logger.warning(f"Could not compare mode correlations: {e}")
+
+    logger.success("All statistical tests complete.")
+
+
+@app.command()
+def mesh():
+    """Generate MeSH topic evolution visualizations."""
+    _run_comparative_mesh()
+    logger.success("MeSH topic evolution visualizations complete.")
+
+
+@app.command()
+def institutions():
+    """Generate institution-level analysis visualizations."""
+    _run_comparative_institutions()
+    logger.success("Institution analysis visualizations complete.")
+
+
+@app.command()
 def all():
-    """Generate ALL visualizations: per-mode + comparative + graphs + summary."""
+    """Generate ALL visualizations: per-mode + comparative + graphs + summary + statistics."""
     logger.info("=== Generating ALL visualizations ===")
 
     # Per-mode
@@ -237,11 +318,16 @@ def all():
     _run_comparative_temporal()
     _run_comparative_geographic()
     _run_comparative_funding()
+    _run_comparative_mesh()
+    _run_comparative_institutions()
 
     # Summary
     _run_comparative_summary()
 
-    # Statistical comparison
+    # Statistical tests (Streams 3 + 5)
+    _run_statistical_tests()
+
+    # Correlation comparison
     from artificial_intelligence_in_medicine.visualizations.statistical import (
         compare_mode_correlations,
     )
@@ -251,7 +337,7 @@ def all():
     except Exception as e:
         logger.warning(f"Could not compare mode correlations: {e}")
 
-    logger.success("=== All visualizations generated successfully ===")
+    logger.success("=== All visualizations and statistical tests generated successfully ===")
 
 
 if __name__ == "__main__":
